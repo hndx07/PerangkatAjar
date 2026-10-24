@@ -1,0 +1,6 @@
+{
+  "name": "Perangkat Ajar Terpadu · ATP → Materi → RPP",
+  "description": "Satu aplikasi untuk menyusun ATP, prompt slide materi ajar, dan RPP Deep Learning Kurikulum Merdeka secara terhubung untuk SMK Muhammadiyah Bawang, Batang.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
