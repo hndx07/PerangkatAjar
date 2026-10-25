@@ -362,7 +362,7 @@ export function generatePerangkatAjarFromRpp(
               lingkunganBelajar: {
                 ruangFisik: [
                   'Kelas yang Fleksibel dan Kolaboratif',
-                  'Bengkel / Laboratorium praktik SMK Muhammadiyah Bawang standar 5S/5R',
+                  `Bengkel / Laboratorium praktik ${identity.schoolName} standar 5S/5R`,
                 ],
                 ruangVirtual: [
                   'Google Classroom (mengatur proyek, tugas, materi digital, dan forum diskusi)',
@@ -822,7 +822,7 @@ function generateRppForMaterial(
             lingkunganBelajar: {
               ruangFisik: [
                 'Kelas yang Fleksibel dan Kolaboratif',
-                'Bengkel / Laboratorium praktik SMK Muhammadiyah Bawang yang memadai dan berstandar 5S/5R',
+                `Bengkel / Laboratorium praktik ${identity.schoolName} yang memadai dan berstandar 5S/5R`,
               ],
               ruangVirtual: [
                 'Google Classroom (untuk mengatur proyek, mengunggah tugas, diskusi daring, materi dan forum tanya jawab)',
