@@ -135,6 +135,7 @@ export const INITIAL_FORM_DATA: PromptFormData = {
   indikatorBerhasil: '1) Menyebutkan 3 ciri utama pesan phishing; 2) Menemukan tautan mencurigakan pada studi kasus simulasi; 3) Merancang prosedur proteksi akun.',
   pengetahuanAwalSiswa: 'Siswa sudah terbiasa menggunakan email, browser, dan media sosial di smartphone masing-masing.',
   pendekatan: 'Problem-Based Learning (PBL) dipadukan dengan Deep Learning (mindful, meaningful, joyful)',
+  tujuanAlurSlide: '',
 
   // 3. KONDISI KELAS
   perangkat: ['HP Siswa', 'Laptop Guru', 'Proyektor'],
@@ -212,6 +213,7 @@ export const BLANK_FORM_DATA: PromptFormData = {
   indikatorBerhasil: 'buatkan',
   pengetahuanAwalSiswa: '',
   pendekatan: 'Deep Learning (Mindful, Meaningful, Joyful)',
+  tujuanAlurSlide: '',
   perangkat: ['HP Siswa', 'Proyektor'],
   internet: 'stabil',
   karakterSiswaKendala: '',
