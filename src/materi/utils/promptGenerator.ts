@@ -84,6 +84,10 @@ export function generatePromptInduk(
   lines.push(`- Indikator berhasil: ${data.indikatorBerhasil || (cleanUnusedLines ? '' : '[ISI atau "buatkan"]')}`);
   lines.push(`- Pengetahuan awal siswa: ${data.pengetahuanAwalSiswa || (cleanUnusedLines ? '' : '[ISI]')}`);
   lines.push(`- Pendekatan: ${data.pendekatan || (cleanUnusedLines ? '' : '[mis. deep learning (mindful, meaningful, joyful), PBL, PjBL, inkuiri]')}`);
+  const tujuanAlurSlide = (data.tujuanAlurSlide || '').replace(/\s*\n+\s*/g, ' | ').trim();
+  lines.push(
+    `- Tujuan & alur pembelajaran untuk slide pembuka (WAJIB): ${tujuanAlurSlide || 'turunkan dari CP/TP/ATP di atas'}`
+  );
   lines.push('');
 
   // 3. KONDISI KELAS
@@ -97,20 +101,43 @@ export function generatePromptInduk(
 
   // 4. ALUR (urutkan, hapus yang tidak perlu)
   lines.push('*4. ALUR (urutkan, hapus yang tidak perlu)*');
+  // Butir "Tujuan & alur" bersifat WAJIB: selalu aktif, tampil satu kali, tidak bisa dimatikan
+  const isTujuanAlur = (label: string) => /tujuan/i.test(label) && /alur/i.test(label);
+  const alurLines: string[] = [];
+  let wajibIndex = -1;
   data.alurList.forEach((item) => {
+    if (isTujuanAlur(item.label)) {
+      if (wajibIndex === -1) {
+        wajibIndex = alurLines.length;
+        const catatan = item.customNote && item.customNote.trim() ? `; catatan: ${item.customNote.trim()}` : '';
+        alurLines.push(
+          `[x] Tujuan & alur pembelajaran (WAJIB, ada di awal pembelajaran, tepat setelah slide pembuka; isi sesuai A.2)${catatan}`
+        );
+      }
+      return;
+    }
     if (cleanUnusedLines && !item.enabled) {
       return; // Omit unchecked items if cleaning unused lines
     }
     const checkMark = item.enabled ? '[x]' : '[ ]';
     if (item.customNote && item.customNote.trim()) {
-      lines.push(`${checkMark} ${item.label}: ${item.customNote.trim()}`);
+      alurLines.push(`${checkMark} ${item.label}: ${item.customNote.trim()}`);
     } else if (item.label.toLowerCase().includes('slide penutup') || item.label.toLowerCase().includes('tautan lanjutan')) {
       const urlText = cleanUnusedLines ? '' : ': [URL atau hapus]';
-      lines.push(`${checkMark} ${item.label}${urlText}`);
+      alurLines.push(`${checkMark} ${item.label}${urlText}`);
     } else {
-      lines.push(`${checkMark} ${item.label}`);
+      alurLines.push(`${checkMark} ${item.label}`);
     }
   });
+  if (wajibIndex === -1) {
+    // Daftar alur tidak memuat butir ini (mis. template lain): sisipkan setelah butir pertama
+    alurLines.splice(
+      Math.min(1, alurLines.length),
+      0,
+      '[x] Tujuan & alur pembelajaran (WAJIB, ada di awal pembelajaran, tepat setelah slide pembuka; isi sesuai A.2)'
+    );
+  }
+  alurLines.forEach((l) => lines.push(l));
   lines.push('');
 
   // 5. MENU AKTIVITAS (centang 3–6)
@@ -193,7 +220,7 @@ export function generatePromptInduk(
   const securityClauses: string[] = [];
   if (q.hitungNilaiLangsung) securityClauses.push('laporan nilai jika nilai langsung dihitung');
   if (q.timerDurasi) securityClauses.push(`lama pengerjaan (sediakan timer ${q.timerMenit} menit)`);
-  if (q.antiKopas) securityClauses.push('tidak bisa kopas');
+  if (q.antiKopas) securityClauses.push('tidak bisa kopas (salin, potong, dan TEMPEL dari clipboard diblokir, lihat Bagian C butir keamanan 4)');
   if (q.antiTranslate) securityClauses.push('tidak bisa translate');
   if (q.antiScreenshot) securityClauses.push('tidak bisa di screenshot');
   
@@ -291,6 +318,7 @@ export function generatePromptInduk(
 
   // Fixed Rules Sections B, C, D
   if (includeSectionsBCD) {
+    const nomorWajibB = mediaAiAktif ? 12 : 11;
     lines.push('══ BAGIAN B. ATURAN TETAP ══');
     lines.push('1. Satu ide per slide, judul jelas, teks singkat (± maks 40 kata), ada ruang untuk aktivitas.');
     lines.push('2. Tiap aktivitas selaras dengan tujuan (A.2), mencantumkan tujuan, durasi, dan bukti belajar. Total durasi sesuai A.1.');
@@ -321,11 +349,25 @@ export function generatePromptInduk(
         lines.push('   h. Internet kelas TERBATAS (A.3): batasi video maksimal 1-2, tampilkan gambar yang ringan, aktifkan lazy loading, dan sediakan penjelasan teks yang setara bila media gagal dimuat.');
       }
     }
+    lines.push(`${nomorWajibB}. WAJIB di awal pembelajaran, tepat setelah slide pembuka (berlaku untuk semua format A.7): sajikan Tujuan Pembelajaran dan Alur Pembelajaran dalam satu slide, atau dua slide berurutan jika terlalu padat (aturan 40 kata pada aturan 1 boleh dilonggarkan untuk slide ini). Slide ini tidak boleh dilewati atau digabung ke slide lain.`);
+    lines.push('   a. Tujuan: 2-4 butir dalam bahasa siswa, diawali kata kerja operasional. Ambil dari "Tujuan & alur pembelajaran untuk slide pembuka" di A.2 bila terisi; jika kosong, turunkan dari CP/TP/ATP di A.2 tanpa mengubah maknanya.');
+    lines.push('   b. Alur: urutan langkah belajar sesuai butir A.4 yang dicentang, berurutan, tiap langkah satu kalimat pendek disertai perkiraan durasi (total sesuai A.1).');
+    lines.push('   c. Tutup dengan satu kalimat tentang hal yang akan dihasilkan atau dibuktikan siswa di akhir (selaras Indikator di A.2).');
     lines.push('');
 
     const isCActive = data.formatKeluaran === 'C';
     lines.push(`══ BAGIAN C. MODUL TEKNIS HTML (${isCActive ? 'aktif: A.7 = C' : 'non-aktif: hanya aktif jika A.7 = C'}) ══`);
-    lines.push('- Satu file; CSS dan JS di-scope ke satu ID root agar aman ditempel di Blogger/LMS (tanpa tag html/body, tanpa style global).');
+    lines.push('- ATURAN TEKNIS BLOGGER (wajib):');
+    lines.push('  * Satu blok: div, style, script. Tanpa tag html, head, atau body. CSS dan JS di-scope ke satu ID root, tanpa style global.');
+    lines.push('  * Di dalam JavaScript hanya boleh karakter ASCII. Semua emoji, simbol, dan tanda kutip lengkung ditulis sebagai \\uXXXX, karena Blogger mengubah karakter non-ASCII menjadi kode seperti &#9201; yang tampil mentah. Tulis data dengan karakter asli, lalu jalankan skrip Python yang meng-escape isi semua tag script (jika tidak ada alat eksekusi kode, tulis \\uXXXX langsung).');
+    lines.push('  * Hindari <, >, &, &&, dan => di JavaScript, serta > dan & di CSS. Buat elemen dengan createElement dan textContent, bukan string HTML. Tanpa komentar //.');
+    lines.push('    Pengganti yang disarankan: if bersarang untuk &&; function biasa untuk =>; Math.min, Math.max, atau Math.sign(selisih) untuk perbandingan besar-kecil; batas loop dengan !== atau forEach; selector CSS memakai class, bukan >.');
+    lines.push('  * Font lewat satu tag link Google Fonts tanpa tanda &.');
+    lines.push('  * Data di blok script terpisah (window.NQ_ST untuk data slide dan teks, window.NQ_QB untuk bank soal), mesin kuis di blok script terakhir, inisialisasi saat event load.');
+    lines.push('  * Jika terdapat gambar, ubah ke ukuran /s800/ pada URL gambar Blogger, dan gambar soal berikutnya di-preload.');
+    if (mediaAiAktif) {
+      lines.push('  * Contoh markup di aturan B.11 (iframe, figure, img, onerror) hanya menunjukkan struktur. Implementasinya tetap lewat createElement dan properti, mis. img.onerror = function.');
+    }
     lines.push('- Mobile-first, responsif portrait dan landscape, tinggi pakai dvh, tombol besar.');
     lines.push('- Navigasi: tombol sebelumnya/berikutnya, swipe, keyboard, nomor slide, progress bar.');
     lines.push('- Tombol layar penuh: requestFullscreen API dengan fallback overlay fixed fullscreen khusus Safari iOS.');
@@ -368,7 +410,17 @@ export function generatePromptInduk(
     lines.push('     - Pelacak Keluar Tab (visibilitychange): Tambah hitungan keluar tab (counter), akumulasi durasi keluar tab (detik), dan simpan log detail maksimal 40 entri [{ jam: "HH:MM:SS", langkah: N, detik: S }].');
     lines.push('     - Tampilkan modal/alert peringatan integritas saat siswa kembali ke tab: "Peringatan: Kamu terdeteksi keluar dari slide materi selama X detik."');
     lines.push('     - Layar penuh (Fullscreen): Pasang tombol toggle fullscreen. Pasang event listener fullscreenchange untuk menghitung frekuensi keluar dari layar penuh. Sediakan fallback class fixed overlay untuk perangkat iOS/iPhone.');
-    lines.push('- Pengiriman ke Google Spreadsheet (Apps Script): Gunakan fetch POST ke URL Apps Script dengan body JSON: { kunci, nama, kelas, skor, durasiTotal, durasiPerLangkah, keluarTabCount, keluarTabDurasi, keluarTabLog, keluarFullscreenCount, jawaban }. Berikan umpan balik loading dan penanganan response { ok: true } vs { ok: false, dup: true }.');
+    if (data.quizSettings.antiKopas) {
+      lines.push('  4. ANTI KOPAS-TEMPEL (siswa tidak bisa menempel dari clipboard):');
+      lines.push('     - Pasang listener di document (fase capture) untuk event copy, cut, paste, dragstart, drop, dan contextmenu: panggil preventDefault(), lalu tampilkan satu toast singkat "Menyalin dan menempel dinonaktifkan." (bukan alert beruntun). Untuk paste dan drop panggil juga stopPropagation().');
+      lines.push('     - Pada event copy dan cut isi clipboardData dengan teks peringatan lewat setData("text/plain", ...) sebelum preventDefault(), agar yang tersalin bukan isi soal.');
+      lines.push('     - Tutup jalur tempel lain: keydown Ctrl+V, Cmd+V, Shift+Insert, Ctrl+Insert, Ctrl+C, Ctrl+X (tulis dengan if bersarang, tanpa &&); event beforeinput dengan inputType insertFromPaste, insertFromPasteAsQuotation, insertFromDrop, atau insertFromYank (preventDefault); dan dragover pada semua input serta textarea.');
+      lines.push('     - Deteksi tempelan yang lolos (mis. strip saran clipboard pada keyboard HP atau isi otomatis): pada tiap event input di kolom isian (nama, kelas, essay, refleksi) simpan panjang nilai sebelumnya. Jika dalam satu event teks bertambah lebih dari 25 karakter (kecuali saat isComposing), kembalikan ke nilai sebelumnya, tampilkan peringatan, dan tambah hitungan percobaanTempel.');
+      lines.push('     - Kosongkan clipboard: saat siswa menekan tombol Mulai (gerakan pengguna) panggil navigator.clipboard.writeText(" ") di dalam try catch agar tidak error bila ditolak; ulangi saat tab kembali terlihat (visibilitychange), juga di dalam try catch. Beri tahu siswa di layar mulai bahwa clipboard dikosongkan selama kuis.');
+      lines.push('     - CSS: user-select: none dan -webkit-touch-callout: none pada konten slide dan soal; untuk input serta textarea kembalikan user-select: text agar pengetikan tetap berfungsi di iOS Safari.');
+      lines.push('     - Hitung percobaanTempel dan percobaanKopas (copy, cut, contextmenu), tampilkan di rekap guru, dan sertakan dalam data kirim ke spreadsheet.');
+    }
+    lines.push(`- Pengiriman ke Google Spreadsheet (Apps Script): Gunakan fetch POST ke URL Apps Script dengan body JSON: { kunci, nama, kelas, skor, durasiTotal, durasiPerLangkah, keluarTabCount, keluarTabDurasi, keluarTabLog, keluarFullscreenCount,${data.quizSettings.antiKopas ? ' percobaanTempel, percobaanKopas,' : ''} jawaban }. Berikan umpan balik loading dan penanganan response { ok: true } vs { ok: false, dup: true }.`);
     lines.push('- Semua hal yang harus diganti guru memakai placeholder mudah dicari, mis. GANTI-LOGO, GANTI-KUNCI-FORMULIR, GANTI-URL-APPSCRIPT, GANTI-URL.');
     lines.push('- Integrasi Media: Sisipkan Lampiran HTML Logo Sekolah di sudut atas slide, Lampiran HTML Background di wrapper slide, Lampiran HTML Media Materi pada slide konsep/kegiatan, dan Lampiran HTML Media Soal pada kartu kuis.');
     if (mediaAiAktif) {
@@ -378,10 +430,13 @@ export function generatePromptInduk(
     lines.push('');
 
     lines.push('══ BAGIAN D. PROSES & FORMAT JAWABAN ══');
-    lines.push('Tahap 1: Tulis asumsi (maks 5 baris), lalu peta slide dalam tabel: No | Judul | Tujuan | Aktivitas | Durasi | Bukti belajar.');
+    lines.push(`Tahap 1: Tulis asumsi (maks 5 baris), lalu peta slide dalam tabel: No | Judul | Tujuan | Aktivitas | Durasi | Bukti belajar. Slide ke-2 wajib Tujuan & Alur Pembelajaran (aturan B.${nomorWajibB}).`);
     lines.push('Jika mode "rancangan dulu", berhenti di sini dan tanya: lanjut atau revisi?');
     lines.push('Tahap 2: Hasilkan keluaran sesuai A.7.');
-    lines.push('Tahap 3: Lampiran: kunci jawaban, rubrik, catatan guru (tips fasilitasi, antisipasi miskonsepsi), 3 saran penyesuaian untuk kelas lain, serta kode lengkap Google Apps Script (doPost) yang menerapkan LockService 20 detik, validasi kolom Kunci (menghasilkan { ok: false, dup: true } jika duplikat), dan pencatatan telemetri pemantauan integritas.');
+    if (isCActive) {
+      lines.push('Khusus A.7 = C: setelah kode jadi, jalankan skrip Python yang meng-escape isi semua tag script ke \\uXXXX (ASCII murni), lalu periksa bahwa tidak ada karakter terlarang (<, >, &, &&, =>, //) di dalam script dan CSS. Tampilkan hasil akhir sebagai satu blok siap tempel ke Blogger.');
+    }
+    lines.push('Tahap 3: Lampiran: kunci jawaban, rubrik, catatan guru (tips fasilitasi, antisipasi miskonsepsi), 3 saran penyesuaian untuk kelas lain, serta kode lengkap Google Apps Script (doPost) yang menerapkan LockService 20 detik, validasi kolom Kunci (menghasilkan { ok: false, dup: true } jika duplikat), dan pencatatan telemetri pemantauan integritas' + (data.quizSettings.antiKopas ? ' (termasuk kolom percobaanTempel dan percobaanKopas)' : '') + '.');
     if (mediaAiAktif) {
       lines.push('Tambahan Tahap 3: daftar media gambar/video yang disematkan (judul, jenis, sumber/kanal, tautan, lisensi, dipakai di slide/soal mana) sesuai aturan B.11.');
     }
