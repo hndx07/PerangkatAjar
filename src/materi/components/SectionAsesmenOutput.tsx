@@ -662,7 +662,7 @@ function doPost(e) {
                   {
                     key: 'antiKopas' as const,
                     label: 'Tidak Bisa Kopas',
-                    desc: 'Disable copy, cut, paste & select',
+                    desc: 'Blokir salin, potong, TEMPEL dari clipboard, seret-lepas & pilih teks',
                     highlight: false,
                   },
                   {
