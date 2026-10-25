@@ -71,6 +71,8 @@ export interface PromptFormData {
   indikatorBerhasil: string;
   pengetahuanAwalSiswa: string;
   pendekatan: string;
+  /** Teks Tujuan & Alur Pembelajaran untuk slide pembuka (wajib). Kosong = diturunkan dari CP/TP/ATP. */
+  tujuanAlurSlide: string;
 
   // 3. KONDISI KELAS
   perangkat: string[];
