@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { PromptFormData } from '../types';
-import { UserCheck, Target, Flame, Wand2, Sparkles, Loader2 } from 'lucide-react';
+import { UserCheck, Target, Flame, Sparkles, Loader2 } from 'lucide-react';
 
 interface SectionIdentitasProps {
   data: PromptFormData;
@@ -138,13 +138,6 @@ export const SectionIdentitas: React.FC<SectionIdentitasProps> = ({
                 <label className="block text-xs font-bold uppercase text-stone-800">
                   Topik / Materi Pokok <span className="text-rose-600">*</span>
                 </label>
-                <button
-                  type="button"
-                  onClick={onOpenAutofill}
-                  className="text-[11px] font-bold text-purple-700 hover:underline flex items-center gap-1"
-                >
-                  <Wand2 className="w-3 h-3" /> Auto-isi AI
-                </button>
               </div>
               <input
                 type="text"
