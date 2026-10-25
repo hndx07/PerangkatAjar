@@ -1,8 +1,8 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { School, ChevronRight } from 'lucide-react';
 import type { Workspace } from './useWorkspace';
 import type { WorkflowStep } from './types';
-import { APP_NAME, SCHOOL_LOGO_URL, SCHOOL_SHORT } from './brand';
+import { APP_LOGO_URL, APP_LOGO_URL_FULL, APP_NAME, SCHOOL_SHORT } from './brand';
 
 interface StepperProps {
   ws: Workspace;
@@ -23,6 +23,7 @@ const STEPS: StepDef[] = [
 ];
 
 export const Stepper: React.FC<StepperProps> = ({ ws }) => {
+  const [logoSrc, setLogoSrc] = useState(APP_LOGO_URL);
   const total = ws.units.length;
 
   const badgeFor = (id: WorkflowStep): string | null => {
@@ -34,20 +35,16 @@ export const Stepper: React.FC<StepperProps> = ({ ws }) => {
   return (
     <div className="sticky top-0 z-50 bg-[#FFFDF7] border-b-[3px] border-black shadow-[0_3px_0_0_#000] no-print">
       <div className="max-w-7xl mx-auto px-3 sm:px-6 py-2 flex items-center gap-2 sm:gap-4">
-        {/* Brand */}
-        <div className="flex items-center gap-2 shrink-0">
-          <div className="w-9 h-9 rounded-lg bg-amber-400 border-2 border-black flex items-center justify-center shadow-[2px_2px_0px_#000] overflow-hidden">
-            <img
-              src={SCHOOL_LOGO_URL}
-              alt="Logo SMK Muhammadiyah Bawang"
-              className="w-7 h-7 object-contain"
-              referrerPolicy="no-referrer"
-            />
-          </div>
-          <div className="hidden lg:block leading-tight">
-            <div className="font-display font-black text-sm text-neutral-900">{APP_NAME}</div>
-            <div className="text-[10px] font-semibold text-neutral-600">{SCHOOL_SHORT}</div>
-          </div>
+        {/* Brand: logo tanpa bingkai */}
+        <div className="flex items-center shrink-0">
+          <img
+            src={logoSrc}
+            alt={APP_NAME}
+            title={`${APP_NAME} · ${SCHOOL_SHORT}`}
+            className="h-9 sm:h-10 w-auto max-w-[9rem] object-contain"
+            referrerPolicy="no-referrer"
+            onError={() => setLogoSrc(APP_LOGO_URL_FULL)}
+          />
         </div>
 
         {/* Langkah */}
