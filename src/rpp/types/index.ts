@@ -86,6 +86,14 @@ export interface SchoolIdentity {
   namaKepalaSekolah: string;
   nipKepalaSekolah: string;
   tanggalPenyusunan: string;
+  /** Tempat penyusunan pada tanda tangan (mis. "Bawang"). Kosong/tidak ada = "Bawang". */
+  tempatPenyusunan?: string;
+  /** Alamat gambar logo sekolah (URL atau data URI) untuk kop & watermark. Kosong = logo bawaan. */
+  logoSekolah?: string;
+  /** Asal logo yang dipilih pengguna. */
+  logoSumber?: 'bawaan' | 'unggah' | 'url';
+  /** Teks URL / kode embed yang diketik pengguna, disimpan agar bisa diedit lagi. */
+  logoKode?: string;
 }
 
 export interface AlurTujuanPembelajaranItem {
