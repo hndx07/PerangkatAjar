@@ -1,8 +1,7 @@
 import React, { useMemo, useState } from 'react';
-import { ArrowLeft, ArrowRight, Flame, RotateCcw } from 'lucide-react';
+import { ArrowLeft, Flame, RotateCcw } from 'lucide-react';
 import type { PromptFormData } from '../../materi/types';
 import { generatePromptInduk } from '../../materi/utils/promptGenerator';
-import { Header } from '../../materi/components/Header';
 import { PresetSelector } from '../../materi/components/PresetSelector';
 import { SectionIdentitas } from '../../materi/components/SectionIdentitas';
 import { SectionKelasAlur } from '../../materi/components/SectionKelasAlur';
@@ -160,13 +159,6 @@ export const MateriStep: React.FC<{ ws: Workspace }> = ({ ws }) => {
 
   return (
     <div className="flex-1 flex flex-col vintage-dot-bg">
-      <Header
-        onCopy={handleCopyPrompt}
-        copied={copied}
-        onDownload={handleDownloadPrompt}
-        onReset={ws.resetMateriUnit}
-      />
-
       <main className="flex-1 max-w-7xl mx-auto px-4 sm:px-6 py-6 w-full space-y-5">
         {/* Banner langkah */}
         <section className="bg-rose-300 border-2 border-black rounded-2xl p-4 sm:p-5 shadow-[4px_4px_0px_#000] flex flex-col md:flex-row md:items-center justify-between gap-3 no-print">
@@ -322,25 +314,6 @@ export const MateriStep: React.FC<{ ws: Workspace }> = ({ ws }) => {
           onSave={ws.saveMateriLinks}
           onGoToRpp={() => ws.openUnit(activeUnit.index, 'rpp')}
         />
-
-        <div className="flex items-center justify-between pt-2 no-print">
-          <button
-            type="button"
-            onClick={() => ws.goToStep('atp')}
-            className="neo-btn px-4 py-2 bg-white hover:bg-neutral-100 text-black rounded-lg text-xs font-black flex items-center gap-1.5"
-          >
-            <ArrowLeft className="w-4 h-4" />
-            Kembali ke ATP
-          </button>
-          <button
-            type="button"
-            onClick={() => ws.openUnit(activeUnit.index, 'rpp')}
-            className="neo-btn px-4 py-2 bg-neutral-900 hover:bg-neutral-800 text-amber-300 rounded-lg text-xs font-black flex items-center gap-1.5"
-          >
-            Lanjut ke RPP
-            <ArrowRight className="w-4 h-4" />
-          </button>
-        </div>
       </main>
 
       <AutofillModal
