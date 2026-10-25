@@ -11,6 +11,8 @@ interface DocumentTabsProps {
   watermarkOpacity: number;
   setWatermarkOpacity: (val: number) => void;
   onOpenRppEditor?: (initialTab?: 'desain' | 'sintaks' | 'asesmen' | 'lampiran') => void;
+  /** Sembunyikan daftar pilihan unit bila halaman induk sudah menyediakan pemilih unit sendiri. */
+  hideUnitSelector?: boolean;
 }
 
 export const DocumentTabs: React.FC<DocumentTabsProps> = ({
@@ -22,6 +24,7 @@ export const DocumentTabs: React.FC<DocumentTabsProps> = ({
   watermarkOpacity,
   setWatermarkOpacity,
   onOpenRppEditor,
+  hideUnitSelector = false,
 }) => {
   const [showF4Guide, setShowF4Guide] = useState(false);
 
@@ -136,7 +139,7 @@ export const DocumentTabs: React.FC<DocumentTabsProps> = ({
       </div>
 
       {/* Sub-selector: Choose Material for RPP */}
-      {(documentMode === 'modul_selected' || documentMode === 'lampiran_selected' || documentMode === 'both_separate') && (
+      {!hideUnitSelector && (documentMode === 'modul_selected' || documentMode === 'lampiran_selected' || documentMode === 'both_separate') && (
         <div className="pt-2 border-t border-black/10 flex flex-wrap items-center gap-2">
           <span className="text-[11px] font-black uppercase tracking-wider text-neutral-600 flex items-center gap-1">
             <ChevronRight className="w-3.5 h-3.5 text-amber-600" />
