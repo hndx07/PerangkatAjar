@@ -8,6 +8,7 @@ import { CheckCircle2, CheckSquare, Square, Printer, Info, Edit3, Code2, Externa
 import { ReadableColumnPoints } from './ReadableColumnPoints';
 import { FormattedInstruction } from './FormattedInstruction';
 import { getLangkahKegiatanAwal } from '../utils/kegiatanAwal';
+import { DEFAULT_SCHOOL_LOGO_URL, DEFAULT_WATERMARK_URL } from '../utils/logo';
 
 export interface PrintableDocumentProps {
   identity: SchoolIdentity;
@@ -32,10 +33,11 @@ export const PrintableDocument: React.FC<PrintableDocumentProps> = ({
   watermarkOpacity = 0.5,
   onOpenRppEditor,
 }) => {
-  const schoolLogoUrl =
-    'https://blogger.googleusercontent.com/img/b/R29vZ2xl/AVvXsEgzWdtCjCcX2chJuhLX_26N5MmkVK-1SkyO7kgXznQQJPQa6_TB_EJzD1WWpztg7yX9RBRE7rGn0t2Z3FdG06mwwT6pQix8t6vnlcOBm_EgGl9z0jeJemJkppP0KIIjkXGksQvaCLh2dz-gOF6a2H213VQBL6Am8Elhmd76OOnphogk-EoTTbkYbg0TQJhv/s512/34690.png';
-  const watermarkUrl =
-    'https://blogger.googleusercontent.com/img/b/R29vZ2xl/AVvXsEh14eQT9MWn4-D1hdb8FisPsg0qK1iIvxXbMg0RGCvXFzUVWUt_KTiOWcEBzrJYxqALWV7_RPeowvTNfbyw-tbCeDb40lvY5jm_lWN5_jjeZko2SF82_wLRcW2-rBs6fWcauvugbRXBRODAeDb0FBkV81rSrgh6stKQG9ZWf5MU3qxTwiqdSEO9AaJ1EbUX/s480/44857.png';
+  // Logo kop & watermark mengikuti identitas; bila alamatnya rusak, jatuh ke logo bawaan
+  const [brokenLogo, setBrokenLogo] = React.useState<string | null>(null);
+  const customLogo = identity.logoSekolah && identity.logoSekolah !== brokenLogo ? identity.logoSekolah : '';
+  const schoolLogoUrl = customLogo || DEFAULT_SCHOOL_LOGO_URL;
+  const watermarkUrl = customLogo || DEFAULT_WATERMARK_URL;
 
   const effectiveMode = documentMode || (activeFilter === 'atp' ? 'atp_only' : activeFilter === 'modul' ? 'modul_selected' : activeFilter === 'all_modul' ? 'modul_all' : 'both_separate');
   const safeIndex = Math.min(
@@ -57,33 +59,34 @@ export const PrintableDocument: React.FC<PrintableDocumentProps> = ({
         <div className="w-24 h-24 shrink-0 flex items-center justify-center">
           <img
             src={schoolLogoUrl}
-            alt="Logo SMK Muhammadiyah Bawang"
+            alt={`Logo ${identity.schoolName}`}
             className="w-20 h-20 object-contain"
             referrerPolicy="no-referrer"
+            onError={() => identity.logoSekolah && setBrokenLogo(identity.logoSekolah)}
           />
         </div>
 
         <div className="flex-1 text-center font-sans">
           <h4 className="text-xs sm:text-sm font-black tracking-widest text-neutral-900 uppercase leading-tight">
-            {identity.majelisLine1 || 'MAJLIS PENDIDIKAN DASAR DAN MENENGAH'}
+            {identity.majelisLine1 ?? 'MAJLIS PENDIDIKAN DASAR DAN MENENGAH'}
           </h4>
           <h5 className="text-xs sm:text-sm font-black tracking-wider text-neutral-900 uppercase leading-tight mt-0.5">
-            {identity.majelisLine2 || 'DAERAH MUHAMMADIYAH BATANG'}
+            {identity.majelisLine2 ?? 'DAERAH MUHAMMADIYAH BATANG'}
           </h5>
           <h1 className="font-black text-xl sm:text-2xl md:text-3xl text-neutral-950 uppercase tracking-tight mt-0.5 leading-none">
-            {identity.schoolName || 'SMK MUHAMMADIYAH BAWANG'}
+            {identity.schoolName ?? 'SMK MUHAMMADIYAH BAWANG'}
           </h1>
           <div className="text-xs sm:text-sm font-black tracking-[0.25em] text-neutral-900 uppercase my-1">
-            {identity.statusAkreditasi || 'T E R A K R E D I T A S I  “ A ”'}
+            {identity.statusAkreditasi ?? 'T E R A K R E D I T A S I  “ A ”'}
           </div>
           <p className="text-[11px] sm:text-xs text-neutral-800 font-semibold leading-tight">
-            {identity.alamatLengkap || 'Jl. Bawang-Sukorejo Km 01 Ds. Jlamprang Kec. Bawang Kab. Batang.'}
+            {identity.alamatLengkap ?? 'Jl. Bawang-Sukorejo Km 01 Ds. Jlamprang Kec. Bawang Kab. Batang.'}
           </p>
           <p className="text-[10px] sm:text-[11px] text-neutral-800 font-medium leading-tight mt-0.5">
-            Email : <span className="underline">{identity.email || 'smkmuhbawang@gmail.com'}</span>  Website : <span className="underline">{identity.website || 'www.smkmuhiba.sch.id'}</span>
+            Email : <span className="underline">{identity.email ?? 'smkmuhbawang@gmail.com'}</span>  Website : <span className="underline">{identity.website ?? 'www.smkmuhiba.sch.id'}</span>
           </p>
           <p className="text-[10px] sm:text-[11px] text-neutral-800 font-medium leading-tight">
-            Kode Pos. {identity.kodePos || '51274'} Telp. {identity.telepon || '(0285) 4486909'} Fax. {identity.fax || '(0285) 4486899'}
+            Kode Pos. {identity.kodePos ?? '51274'} Telp. {identity.telepon ?? '(0285) 4486909'} Fax. {identity.fax ?? '(0285) 4486899'}
           </p>
         </div>
 
@@ -103,20 +106,20 @@ export const PrintableDocument: React.FC<PrintableDocumentProps> = ({
         LEMBAR PENGESAHAN {contextTitle.toUpperCase()}
       </div>
       <p className="text-[11px] text-neutral-700 leading-relaxed text-center max-w-2xl mx-auto mb-5">
-        Disahkan dan dinyatakan berlaku sebagai panduan resmi pelaksanaan pembelajaran di <strong>SMK Muhammadiyah Bawang</strong> untuk Tahun Pelajaran {identity.tahunPelajaran}.
+        Disahkan dan dinyatakan berlaku sebagai panduan resmi pelaksanaan pembelajaran di <strong>{identity.schoolName}</strong> untuk Tahun Pelajaran {identity.tahunPelajaran}.
       </p>
 
       <div className="grid grid-cols-2 gap-8 text-xs text-neutral-900 pt-2 max-w-4xl mx-auto">
         <div className="text-center">
           <p className="font-medium text-neutral-600">Mengetahui,</p>
-          <p className="font-extrabold text-neutral-900 mt-0.5">Kepala SMK Muhammadiyah Bawang</p>
+          <p className="font-extrabold text-neutral-900 mt-0.5">Kepala {identity.schoolName}</p>
           <div className="h-24"></div>
           <p className="font-black underline text-sm">{identity.namaKepalaSekolah}</p>
           <p className="text-[11px] font-mono text-neutral-600">NBM/NIP. {identity.nipKepalaSekolah}</p>
         </div>
 
         <div className="text-center">
-          <p className="font-medium text-neutral-600">Bawang, {identity.tanggalPenyusunan}</p>
+          <p className="font-medium text-neutral-600">{identity.tempatPenyusunan ?? 'Bawang'}, {identity.tanggalPenyusunan}</p>
           <p className="font-extrabold text-neutral-900 mt-0.5">Guru Pengampu</p>
           <div className="h-24"></div>
           <p className="font-black underline text-sm">{identity.namaGuru}</p>
@@ -181,7 +184,7 @@ export const PrintableDocument: React.FC<PrintableDocumentProps> = ({
             LAMPIRAN RPP PENDEKATAN DEEP LEARNING
           </h4>
           <p className="text-xs text-neutral-600">
-            Unit {index + 1}: {modul.judulMateri} · SMK Muhammadiyah Bawang, Batang
+            Unit {index + 1}: {modul.judulMateri} · {identity.schoolName}, {identity.kabupaten}
           </p>
 
           {/* Screen quick edit trigger for Lampiran */}
@@ -429,7 +432,7 @@ export const PrintableDocument: React.FC<PrintableDocumentProps> = ({
         {/* Title Header RPP */}
         <div className="text-center pb-1">
           <span className="text-[10px] font-black uppercase tracking-widest text-neutral-500 block mb-0.5">
-            PERANGKAT AJAR KURIKULUM MERDEKA · SMK MUHAMMADIYAH BAWANG
+            PERANGKAT AJAR KURIKULUM MERDEKA · {identity.schoolName.toUpperCase()}
           </span>
           <h2 className="font-display font-black text-base sm:text-lg text-neutral-950 uppercase tracking-tight">
             RENCANA PELAKSANAAN PEMBELAJARAN (RPP)
@@ -455,7 +458,7 @@ export const PrintableDocument: React.FC<PrintableDocumentProps> = ({
                 <div className="grid grid-cols-[150px_16px_1fr] items-start p-2">
                   <span className="font-bold text-neutral-800">Satuan Pendidikan</span>
                   <span className="font-bold text-center text-neutral-900">:</span>
-                  <span className="font-semibold text-neutral-900 pl-1">SMK Muhammadiyah Bawang, Batang</span>
+                  <span className="font-semibold text-neutral-900 pl-1">{identity.schoolName}, {identity.kabupaten}</span>
                 </div>
                 <div className="grid grid-cols-[150px_16px_1fr] items-start p-2">
                   <span className="font-bold text-neutral-800">Program Keahlian</span>
@@ -1288,7 +1291,7 @@ export const PrintableDocument: React.FC<PrintableDocumentProps> = ({
       >
         <img
           src={watermarkUrl}
-          alt="Watermark SMK Muhammadiyah Bawang"
+          alt={`Watermark ${identity.schoolName}`}
           className="w-[550px] h-[550px] object-contain select-none max-w-none transform -rotate-12"
           referrerPolicy="no-referrer"
         />
@@ -1311,7 +1314,7 @@ export const PrintableDocument: React.FC<PrintableDocumentProps> = ({
                 MATA PELAJARAN: {identity.mataPelajaran.toUpperCase()} · FASE {identity.fase} / KELAS {identity.kelas}
               </p>
               <p className="text-[11px] font-semibold text-neutral-600">
-                Tahun Pelajaran {identity.tahunPelajaran} · SMK Muhammadiyah Bawang, Batang
+                Tahun Pelajaran {identity.tahunPelajaran} · {identity.schoolName}, {identity.kabupaten}
               </p>
             </div>
 
@@ -1322,7 +1325,7 @@ export const PrintableDocument: React.FC<PrintableDocumentProps> = ({
                   <div className="grid grid-cols-[150px_16px_1fr] items-start p-2">
                     <span className="font-bold text-neutral-800">Satuan Pendidikan</span>
                     <span className="font-bold text-center text-neutral-900">:</span>
-                    <span className="font-semibold text-neutral-900 pl-1">SMK Muhammadiyah Bawang, Batang</span>
+                    <span className="font-semibold text-neutral-900 pl-1">{identity.schoolName}, {identity.kabupaten}</span>
                   </div>
                   <div className="grid grid-cols-[150px_16px_1fr] items-start p-2">
                     <span className="font-bold text-neutral-800">Program Keahlian</span>
