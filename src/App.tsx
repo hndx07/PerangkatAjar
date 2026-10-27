@@ -44,7 +44,7 @@ export default function App() {
         <div className="max-w-7xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-3 text-xs text-neutral-600">
           <div className="flex items-center gap-2 font-bold text-neutral-800">
             <Compass className="w-4 h-4 text-amber-600" />
-            <span>Deep Learning · Kurikulum Merdeka</span>
+            <span>Kurikulum Merdeka</span>
           </div>
           <div className="text-xs font-black text-neutral-900 bg-amber-200 border-2 border-black px-3.5 py-1 rounded-lg shadow-[2px_2px_0px_#000]">
             developed by @hndx07
