@@ -1,0 +1,942 @@
+import * as XLSX from 'xlsx';
+import {
+  ExcelRawRow,
+  ExcelRppRawRow,
+  ParsedExcelResult,
+  AlurTujuanPembelajaranItem,
+  SchoolIdentity,
+  ModulAjarData,
+} from '../types';
+import { getLangkahKegiatanAwal, langkahToExcelCell } from './kegiatanAwal';
+
+/**
+ * Normalizes header string to recognize variations in teacher spreadsheets
+ */
+function normalizeKey(str: string): string {
+  return str.toLowerCase().replace(/[^a-z0-9]/g, '');
+}
+
+/** Nama kolom Template RPP Terintegrasi. Sama persis dengan nama kolom pada prompt AI. */
+export const RPP_TEMPLATE_HEADERS: string[] = [
+  'No / Unit',
+  'Elemen',
+  'CP',
+  'ATP / TP',
+  'Tahapan Alur',
+  'Lingkup Materi Pokok',
+  'Alokasi Waktu (JP)',
+  'Fase',
+  'Kelas',
+  'Semester',
+  'Lintas Disiplin Ilmu',
+  'Kesiapan Peserta Didik',
+  'Karakteristik Materi',
+  'Dimensi Profil Lulusan',
+  'Metode & Model',
+  'Kemitraan Industri & Orang Tua',
+  'Lingkungan Belajar',
+  'Pemanfaatan Digital',
+  'Sintaks Pendahuluan (Mindful)',
+  'Sintaks Inti 1 (Memahami & Eksplorasi)',
+  'Sintaks Inti 2 (Mengaplikasi & Merefleksi)',
+  'Sintaks Penutup',
+  'Asesmen Awal (Diagnostik)',
+  'Asesmen Proses (Formatif)',
+  'Asesmen Akhir (Sumatif)',
+  'Pengayaan dan Remedial',
+  'Tabel Hasil Eksplorasi',
+  'Tautan Materi',
+  'Kode Embed Materi',
+  'Tautan LKPD',
+  'Kode Embed LKPD',
+  'Kode Embed Rubrik',
+];
+
+export const RPP_TEMPLATE_WIDTHS: number[] = [8, 28, 45, 45, 35, 35, 16, 8, 8, 12, 28, 35, 35, 30, 30, 32, 30, 28, 45, 45, 45, 40, 32, 35, 35, 35, 45, 32, 40, 32, 40, 45];
+
+/**
+ * Mengurai isi lembar kerja (array of arrays) menjadi baris CP/ATP/RPP.
+ * Dipisahkan dari pembacaan berkas agar bisa diuji tanpa peramban.
+ */
+export function parseWorksheetRows(rawAoA: any[][]): ParsedExcelResult {
+  if (!rawAoA || rawAoA.length === 0) {
+    throw new Error('File Excel kosong atau tidak terbaca.');
+  }
+
+  let headerRowIndex = -1;
+  let colMap: { [key: string]: number } = {};
+  let isRppFormat = false;
+
+  // Scan the first 15 rows to find the main header
+  for (let r = 0; r < Math.min(rawAoA.length, 15); r++) {
+    const row = rawAoA[r];
+    if (!Array.isArray(row)) continue;
+
+    const rowKeys = row.map((c) => (c ? normalizeKey(String(c)) : ''));
+
+    // Check for RPP specific keys
+    const rppKeyMatches = rowKeys.filter((k) =>
+      k.includes('sintaks') ||
+      k.includes('kegiatanawal') ||
+      k.includes('metode') ||
+      k.includes('mindful') ||
+      k.includes('meaningful') ||
+      k.includes('joyful') ||
+      k.includes('pedagogik') ||
+      k.includes('kesiapan') ||
+      k.includes('asesmenawal') ||
+      k.includes('asesmenproses') ||
+      k.includes('asesmenakhir') ||
+      k.includes('diagnostik') ||
+      k.includes('sumatif') ||
+      k.includes('profillulusan')
+    );
+
+    const hasElemen = rowKeys.some((k) => k.includes('elemen') || k.includes('aspek') || k.includes('bidang'));
+    const hasCP = rowKeys.some((k) => k.includes('capaian') || k === 'cp' || k.includes('pembelajaran'));
+    const hasMateri = rowKeys.some((k) => k.includes('materi') || k.includes('konten') || k.includes('topik'));
+
+    if (rppKeyMatches.length >= 2 || (hasElemen && hasCP && rppKeyMatches.length >= 1)) {
+      headerRowIndex = r;
+      isRppFormat = true;
+    } else if ((hasElemen && (hasCP || hasMateri)) || (hasCP && hasMateri)) {
+      headerRowIndex = r;
+      isRppFormat = false;
+    }
+
+    if (headerRowIndex !== -1) {
+      rowKeys.forEach((key, idx) => {
+        // Urutan penting: kolom yang lebih spesifik dicek lebih dulu. Contoh: "Kode Embed Materi" dan
+        // "Karakteristik & Sifat Materi" mengandung "materi"; "Pengayaan" mengandung "gaya"; "Asesmen Awal
+        // (Diagnostik)" mengandung "awal" dan "no". Tanpa urutan ini kolom tersebut saling menimpa.
+        if (key.includes('asesmenawal') || key.includes('diagnostik')) colMap['asesmenAwal'] = idx;
+        else if (key.includes('asesmenproses') || key.includes('formatif') || key.includes('unjukkerja')) colMap['asesmenProses'] = idx;
+        else if (key.includes('asesmenakhir') || key.includes('sumatif')) colMap['asesmenAkhir'] = idx;
+        else if (key.includes('tautanmateri') || key.includes('linkmateri')) colMap['tautanMateri'] = idx;
+        else if (key.includes('embedmateri') || key.includes('scriptmateri') || key.includes('htmlmateri')) colMap['embedMateri'] = idx;
+        else if (key.includes('tautanlkpd') || key.includes('linklkpd')) colMap['tautanLkpd'] = idx;
+        else if (key.includes('embedlkpd') || key.includes('scriptlkpd') || key.includes('htmllkpd')) colMap['embedLkpd'] = idx;
+        else if (key.includes('embedrubrik') || key.includes('rubrikembed')) colMap['embedRubrik'] = idx;
+        else if (key.includes('pengayaan') || key.includes('remedial')) colMap['pengayaan'] = idx;
+        else if (/^(no|nomor|unit|nounit|nourut|nomorunit)$/.test(key)) colMap['no'] = idx;
+        else if (key.includes('karakteristik') || key.includes('sifat')) colMap['karakteristik'] = idx;
+        else if (key.includes('kesiapan') || key.includes('minat') || key.includes('gaya')) colMap['kesiapan'] = idx;
+        else if (key.includes('elemen') || key.includes('aspek')) colMap['elemen'] = idx;
+        else if (key.includes('capaian') || key === 'cp') colMap['cp'] = idx;
+        else if (key.includes('tujuan') || key === 'tp' || key.includes('atp')) colMap['tp'] = idx;
+        else if (key.includes('alur') || key.includes('tahapan')) colMap['alur'] = idx;
+        else if (key.includes('materi') || key.includes('konten') || key.includes('topik')) colMap['materi'] = idx;
+        else if (key.includes('waktu') || key.includes('jp') || key.includes('jam') || key.includes('alokasi')) colMap['jp'] = idx;
+        else if (key.includes('fase')) colMap['fase'] = idx;
+        else if (key.includes('kelas') || key.includes('tingkat')) colMap['kelas'] = idx;
+        else if (key.includes('semester')) colMap['semester'] = idx;
+        else if (key.includes('disiplin') || key.includes('lintas')) colMap['lintasDisiplin'] = idx;
+        else if (key.includes('profil') || key.includes('lulusan') || key.includes('p5')) colMap['profil'] = idx;
+        else if (key.includes('metode') || key.includes('model') || key.includes('pbl') || key.includes('pjbl')) colMap['metode'] = idx;
+        else if (key.includes('mitra') || key.includes('kemitraan') || key.includes('dudi')) colMap['kemitraan'] = idx;
+        else if (key.includes('lingkungan') && !key.includes('digital')) colMap['lingkungan'] = idx;
+        else if (key.includes('digital') || key.includes('pemanfaatan')) colMap['digital'] = idx;
+        else if (key.includes('pendahuluan') || key.includes('kegiatanawal') || key.includes('sintaksawal') || key === 'awal' || key.includes('mindful')) colMap['sintaksAwal'] = idx;
+        else if (key.includes('inti1') || key.includes('memahami') || key.includes('meaningful')) colMap['sintaksInti1'] = idx;
+        else if (key.includes('inti2') || key.includes('aplikasi') || key.includes('joyful') || key.includes('refleksiberkesadaran')) colMap['sintaksInti2'] = idx;
+        else if (key.includes('penutup') || key.includes('refleksi321') || key.includes('kaizen')) colMap['sintaksPenutup'] = idx;
+        else if (key.includes('tabeleksplorasi') || key.includes('hasileksplorasi') || key.includes('eksplorasi') || key.includes('datapengamatan')) colMap['tabelEksplorasi'] = idx;
+      });
+      break;
+    }
+  }
+
+  // Fallback for default CP layout if no header found
+  if (headerRowIndex === -1) {
+    headerRowIndex = 0;
+    colMap = {
+      no: 0,
+      elemen: 1,
+      cp: 2,
+      materi: 3,
+      jp: 4,
+    };
+    isRppFormat = false;
+  }
+
+  const cpRows: ExcelRawRow[] = [];
+  const rppRows: ExcelRppRawRow[] = [];
+  let detectedSubject: string | undefined;
+  let detectedClass: string | undefined;
+  let detectedPhase: string | undefined;
+  let detectedCategory: 'kejuruan' | 'umum' = 'kejuruan';
+
+  // Check top metadata rows
+  for (let r = 0; r < headerRowIndex; r++) {
+    const rowText = (rawAoA[r] || []).join(' ');
+    const lower = rowText.toLowerCase();
+    if (lower.includes('mata pelajaran') || lower.includes('mapel')) {
+      const parts = rowText.split(/[:=]/);
+      if (parts.length > 1) {
+        detectedSubject = parts[1].trim();
+        if (
+          lower.includes('indonesia') ||
+          lower.includes('matematika') ||
+          lower.includes('pancasila') ||
+          lower.includes('inggris') ||
+          lower.includes('sejarah') ||
+          lower.includes('agama') ||
+          lower.includes('pjok') ||
+          lower.includes('seni') ||
+          lower.includes('umum') ||
+          lower.includes('normatif')
+        ) {
+          detectedCategory = 'umum';
+        }
+      }
+    }
+    if (lower.includes('kelas') || lower.includes('fase')) {
+      if (rowText.includes('XI') || rowText.includes('11')) detectedClass = 'XI';
+      else if (rowText.includes('XII') || rowText.includes('12')) detectedClass = 'XII';
+      else if (rowText.includes('X') || rowText.includes('10')) detectedClass = 'X';
+
+      if (rowText.includes('Fase F') || rowText.includes('F')) detectedPhase = 'F';
+      else if (rowText.includes('Fase E') || rowText.includes('E')) detectedPhase = 'E';
+    }
+  }
+
+  // Parse content rows
+  for (let r = headerRowIndex + 1; r < rawAoA.length; r++) {
+    const row = rawAoA[r];
+    if (!row || !Array.isArray(row) || row.every((c) => c === undefined || c === null || String(c).trim() === '')) {
+      continue;
+    }
+
+    const elemenVal = colMap['elemen'] !== undefined ? String(row[colMap['elemen']] || '').trim() : '';
+    const cpVal = colMap['cp'] !== undefined ? String(row[colMap['cp']] || '').trim() : '';
+    const materiVal = colMap['materi'] !== undefined ? String(row[colMap['materi']] || '').trim() : '';
+    const jpRaw = colMap['jp'] !== undefined ? row[colMap['jp']] : '';
+    const faseVal = colMap['fase'] !== undefined ? String(row[colMap['fase']] || '').trim() : '';
+    const kelasVal = colMap['kelas'] !== undefined ? String(row[colMap['kelas']] || '').trim() : '';
+    const semesterVal = colMap['semester'] !== undefined ? String(row[colMap['semester']] || '').trim() : '';
+    const tpVal = colMap['tp'] !== undefined ? String(row[colMap['tp']] || '').trim() : '';
+    const alurVal = colMap['alur'] !== undefined ? String(row[colMap['alur']] || '').trim() : '';
+    const lintasVal = colMap['lintasDisiplin'] !== undefined ? String(row[colMap['lintasDisiplin']] || '').trim() : '';
+    const kesiapanVal = colMap['kesiapan'] !== undefined ? String(row[colMap['kesiapan']] || '').trim() : '';
+    const karakteristikVal = colMap['karakteristik'] !== undefined ? String(row[colMap['karakteristik']] || '').trim() : '';
+    const profilVal = colMap['profil'] !== undefined ? String(row[colMap['profil']] || '').trim() : '';
+    const metodeVal = colMap['metode'] !== undefined ? String(row[colMap['metode']] || '').trim() : '';
+    const kemitraanVal = colMap['kemitraan'] !== undefined ? String(row[colMap['kemitraan']] || '').trim() : '';
+    const digitalVal = colMap['digital'] !== undefined ? String(row[colMap['digital']] || '').trim() : '';
+    const lingkunganVal = colMap['lingkungan'] !== undefined ? String(row[colMap['lingkungan']] || '').trim() : '';
+    const sintaksAwalVal = colMap['sintaksAwal'] !== undefined ? String(row[colMap['sintaksAwal']] || '').trim() : '';
+    const sintaksInti1Val = colMap['sintaksInti1'] !== undefined ? String(row[colMap['sintaksInti1']] || '').trim() : '';
+    const sintaksInti2Val = colMap['sintaksInti2'] !== undefined ? String(row[colMap['sintaksInti2']] || '').trim() : '';
+    const sintaksPenutupVal = colMap['sintaksPenutup'] !== undefined ? String(row[colMap['sintaksPenutup']] || '').trim() : '';
+    const asesmenAwalVal = colMap['asesmenAwal'] !== undefined ? String(row[colMap['asesmenAwal']] || '').trim() : '';
+    const asesmenProsesVal = colMap['asesmenProses'] !== undefined ? String(row[colMap['asesmenProses']] || '').trim() : '';
+    const asesmenAkhirVal = colMap['asesmenAkhir'] !== undefined ? String(row[colMap['asesmenAkhir']] || '').trim() : '';
+    const pengayaanVal = colMap['pengayaan'] !== undefined ? String(row[colMap['pengayaan']] || '').trim() : '';
+    const tabelEksplorasiVal = colMap['tabelEksplorasi'] !== undefined ? String(row[colMap['tabelEksplorasi']] || '').trim() : '';
+    const tautanMateriVal = colMap['tautanMateri'] !== undefined ? String(row[colMap['tautanMateri']] || '').trim() : '';
+    const embedMateriVal = colMap['embedMateri'] !== undefined ? String(row[colMap['embedMateri']] || '').trim() : '';
+    const tautanLkpdVal = colMap['tautanLkpd'] !== undefined ? String(row[colMap['tautanLkpd']] || '').trim() : '';
+    const embedLkpdVal = colMap['embedLkpd'] !== undefined ? String(row[colMap['embedLkpd']] || '').trim() : '';
+    const embedRubrikVal = colMap['embedRubrik'] !== undefined ? String(row[colMap['embedRubrik']] || '').trim() : '';
+
+    // Skip purely blank or explanatory rows
+    if (!elemenVal && !cpVal && !materiVal && !tpVal) continue;
+    if (elemenVal.toLowerCase().startsWith('catatan') || elemenVal.toLowerCase().startsWith('keterangan') || elemenVal.toLowerCase().startsWith('petunjuk')) continue;
+
+    const numJp = typeof jpRaw === 'number' ? jpRaw : parseInt(String(jpRaw).replace(/\D/g, ''), 10) || 12;
+
+    const standardElemen = elemenVal || (cpRows.length > 0 ? cpRows[cpRows.length - 1].elemen : 'Elemen Pembelajaran');
+    const standardCp = cpVal || (cpRows.length > 0 ? cpRows[cpRows.length - 1].capaianPembelajaran : 'Memahami konsep dan menerapkannya dalam pemecahan masalah');
+    const standardMateri = materiVal || standardElemen || `Materi Unit ${cpRows.length + 1}`;
+
+    cpRows.push({
+      no: cpRows.length + 1,
+      elemen: standardElemen,
+      capaianPembelajaran: standardCp,
+      materi: standardMateri,
+      jp: numJp,
+      fase: faseVal || detectedPhase || 'E',
+      kelas: kelasVal || detectedClass || 'X',
+      semester: semesterVal || '1 (Ganjil)',
+      lintasDisiplin: lintasVal,
+      tujuanPembelajaran: tpVal || undefined,
+      alurPembelajaran: alurVal || undefined,
+    });
+
+    if (isRppFormat) {
+      rppRows.push({
+        no: rppRows.length + 1,
+        elemen: standardElemen,
+        capaianPembelajaran: standardCp,
+        tujuanPembelajaran: tpVal || `Peserta didik mampu menganalisis, mempraktikkan, dan memecahkan permasalahan pada materi ${standardMateri} dengan bernalar kritis dan mandiri.`,
+        alurPembelajaran: alurVal,
+        materi: standardMateri,
+        jp: numJp,
+        fase: faseVal || detectedPhase || 'E',
+        kelas: kelasVal || detectedClass || 'X',
+        semester: semesterVal || '1 (Ganjil)',
+        lintasDisiplin: lintasVal,
+        kesiapanPesertaDidik: kesiapanVal,
+        karakteristikMateri: karakteristikVal,
+        profilLulusan: profilVal || 'Penalaran Kritis, Kreativitas, Kolaborasi, Kemandirian',
+        metodePembelajaran: metodeVal || 'Problem-Based Learning (PBL) & Praktik Eksploratif',
+        kemitraan: kemitraanVal,
+        lingkunganBelajar: lingkunganVal,
+        lingkunganDigital: digitalVal,
+        sintaksPendahuluan: sintaksAwalVal,
+        sintaksInti1: sintaksInti1Val,
+        sintaksInti2: sintaksInti2Val,
+        sintaksPenutup: sintaksPenutupVal,
+        asesmenAwal: asesmenAwalVal,
+        asesmenProses: asesmenProsesVal,
+        asesmenAkhir: asesmenAkhirVal,
+        pengayaanRemedial: pengayaanVal,
+        tabelEksplorasi: tabelEksplorasiVal,
+        tautanMateri: tautanMateriVal,
+        embedMateri: embedMateriVal,
+        tautanLkpd: tautanLkpdVal,
+        embedLkpd: embedLkpdVal,
+        embedRubrik: embedRubrikVal,
+      });
+    }
+  }
+
+  if (cpRows.length === 0) {
+    throw new Error('Tidak ada data yang dapat diekstrak dari file Excel. Pastikan terdapat kolom Elemen, Capaian Pembelajaran, dan Materi.');
+  }
+
+  return {
+    fileType: isRppFormat ? 'rpp' : 'cp',
+    cpRows,
+    rppRows: isRppFormat ? rppRows : undefined,
+    detectedSubject,
+    detectedClass,
+    detectedPhase,
+    detectedCategory,
+  };
+}
+
+/**
+ * Parse an uploaded Excel/CSV file into structured objects.
+ * Automatically identifies whether the file is:
+ * 1. 'cp'  : Format Capaian Pembelajaran (CP, Elemen, Materi, JP, Fase, Kelas)
+ * 2. 'rpp' : Format RPP Terintegrasi (Lengkap dengan CP, ATP, Materi, Metode, Sintaks Pembelajaran, dan Asesmen)
+ */
+export async function parseExcelFile(file: File): Promise<ParsedExcelResult> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+
+    reader.onload = (e) => {
+      try {
+        const data = e.target?.result;
+        const workbook = XLSX.read(data, { type: 'binary' });
+
+        // Grab first sheet
+        const firstSheetName = workbook.SheetNames[0];
+        const worksheet = workbook.Sheets[firstSheetName];
+
+        // Convert to array of arrays to find real header row
+        const rawAoA: any[][] = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
+
+        resolve(parseWorksheetRows(rawAoA));
+      } catch (err: any) {
+        reject(new Error(err.message || 'Gagal memproses file Excel'));
+      }
+    };
+
+    reader.onerror = () => reject(new Error('Gagal membaca file dari disk'));
+    reader.readAsBinaryString(file);
+  });
+}
+
+/**
+ * 1. DOWNLOAD TEMPLATE FORMAT EXCEL ATP (Alur Tujuan Pembelajaran)
+ * Format standar resmi bagi guru memasukkan Elemen, CP, ATP/TP, Materi, JP, Fase, Kelas, dan Semester.
+ */
+export function downloadAtpExcelTemplate(type: 'kejuruan' | 'umum' | 'blank' = 'kejuruan') {
+  const wb = XLSX.utils.book_new();
+
+  let templateTitle = '';
+  let filename = '';
+  let sampleDataRows: any[][] = [];
+
+  if (type === 'umum') {
+    templateTitle = 'FORMAT EXCEL ATP MAPEL NORMATIF-ADAPTIF / UMUM - SMK MUHAMMADIYAH BAWANG, BATANG';
+    filename = 'Template_ATP_Mapel_Umum_SMK_Muhammadiyah_Bawang.xlsx';
+    sampleDataRows = [
+      [
+        1,
+        'Menyimak dan Berbicara (Listening & Speaking)',
+        'Pada akhir fase F, peserta didik mampu menggunakan bahasa Inggris untuk berkomunikasi dalam situasi kerja dan sosial, menangani pertanyaan pelanggan (handling inquiries & complaints), berpartisipasi dalam diskusi kelompok kerja, serta melakukan presentasi proyek kejuruan dengan percaya diri.',
+        '1. Menganalisis frasa profesional dalam menangani keluhan pelanggan.\n2. Mensimulasikan percakapan kerja dengan percaya diri dan santun.',
+        'Tahap 1: Video simulasi, Tahap 2: Analisis frasa kunci, Tahap 3: Roleplay berpasangan, Tahap 4: Refleksi 3-2-1',
+        'Workplace Conversations, Asking & Giving Opinions, Handling Inquiries and Complaints, Job Interview Simulation',
+        16,
+        'Fase F',
+        'XI',
+        '1 (Ganjil)',
+        'Bahasa Inggris, Komunikasi Bisnis, dan Kejuruan Terkait',
+      ],
+      [
+        2,
+        'Membaca dan Memirsa (Reading & Viewing)',
+        'Pada akhir fase F, peserta didik mampu memahami, menganalisis, dan mengevaluasi teks informatif, manual instruksi teknis (Technical Operating Manuals / SOP), email bisnis, serta artikel industri berbahasa Inggris secara tepat.',
+        '1. Menelaah manual operasional mesin dan SOP industri berbahasa Inggris.\n2. Menemukan informasi rinci dalam korespondensi bisnis digital.',
+        'Tahap 1: Skimming & scanning manual, Tahap 2: Glosarium istilah teknis, Tahap 3: Diskusi kelompok, Tahap 4: Presentasi temuan',
+        'Reading Technical Specifications & User Manuals, Understanding Business Emails, Procedural Text in Vocational Context',
+        14,
+        'Fase F',
+        'XI',
+        '1 (Ganjil)',
+        'Bahasa Inggris Terapan dan Literasi Digital',
+      ],
+      [
+        3,
+        'Menulis dan Mempresentasikan (Writing & Presenting)',
+        'Pada akhir fase F, peserta didik mampu memproduksi teks tertulis resmi seperti surat lamaran kerja (Application Letter), resume / Curriculum Vitae (CV), laporan hasil pekerjaan (Work Progress Report), serta mempresentasikannya dengan percaya diri.',
+        '1. Menyusun curriculum vitae (CV) dan surat lamaran kerja profesional.\n2. Mempresentasikan portofolio kejuruan dalam bahasa Inggris dengan percaya diri.',
+        'Tahap 1: Analisis format standar internasional, Tahap 2: Drafting resume, Tahap 3: Peer review, Tahap 4: Presentasi pitch deck',
+        'Drafting Professional CV & Cover Letter, Work Report Summaries, Project Presentation Pitch Deck',
+        12,
+        'Fase F',
+        'XI',
+        '1 (Ganjil)',
+        'Bahasa Inggris Terapan dan Manajemen Perkantoran',
+      ],
+    ];
+  } else if (type === 'blank') {
+    templateTitle = 'FORMAT EXCEL ATP KOSONG SIAP INPUT - SMK MUHAMMADIYAH BAWANG, BATANG';
+    filename = 'Format_ATP_Kosong_SMK_Muhammadiyah_Bawang.xlsx';
+    sampleDataRows = [
+      [1, '', '', '', '', '', 18, 'F', 'XI', '1 (Ganjil)', ''],
+      [2, '', '', '', '', '', 18, 'F', 'XI', '1 (Ganjil)', ''],
+      [3, '', '', '', '', '', 18, 'F', 'XI', '1 (Ganjil)', ''],
+    ];
+  } else {
+    templateTitle = 'FORMAT EXCEL ATP MAPEL KEJURUAN (AKL & TSM) - SMK MUHAMMADIYAH BAWANG, BATANG';
+    filename = 'Template_ATP_Kejuruan_AKL_TSM_SMK_Muhammadiyah_Bawang.xlsx';
+    sampleDataRows = [
+      [
+        1,
+        'Praktikum Akuntansi Perusahaan Jasa dan Dagang',
+        'Pada akhir fase F, peserta didik mampu menganalisis dokumen sumber dan pendukung transaksi keuangan, mencatat transaksi ke jurnal khusus dan umum, memposting ke buku besar utama dan pembantu, menyusun neraca lajur, serta menyusun laporan keuangan laba rugi, perubahan ekuitas, neraca, dan arus kas.',
+        '1. Menganalisis bukti transaksi keuangan perusahaan dagang secara teliti.\n2. Mengentri transaksi ke dalam jurnal khusus dan memposting ke buku besar utama dan pembantu.',
+        'Tahap 1: Telaah bukti transaksi, Tahap 2: Pencatatan jurnal khusus, Tahap 3: Posting buku besar, Tahap 4: Penyusunan neraca saldo',
+        'Analisis Bukti Transaksi, Jurnal Khusus & Umum, Buku Besar Pembantu, Neraca Lajur 10 Kolom, Laporan Keuangan SAK EMKM',
+        24,
+        'Fase F',
+        'XI',
+        '1 (Ganjil)',
+        'Akuntansi Keuangan, Matematika Bisnis, dan Manajemen Perkantoran',
+      ],
+      [
+        2,
+        'Komputer Akuntansi (Spreadsheet & Software Akuntansi)',
+        'Pada akhir fase F, peserta didik mampu mengoperasikan aplikasi komputer akuntansi dan spreadsheet untuk membuat data baru perusahaan, menyusun bagan akun (Chart of Accounts), mengelola kartu piutang/utang, mengentri saldo awal dan transaksi penyesuaian, serta mencetak laporan keuangan digital.',
+        '1. Melakukan setup data awal perusahaan dan bagan akun pada aplikasi akuntansi.\n2. Mengentri transaksi pembelian, penjualan, dan rekonsiliasi kas bank secara digital.',
+        'Tahap 1: Pengenalan interface, Tahap 2: Setup file perusahaan baru, Tahap 3: Entri transaksi, Tahap 4: Cetak laporan digital',
+        'Setup Data Awal Perusahaan, Bagan Akun (COA), Entri Transaksi Pembelian & Penjualan, Rekonsiliasi Bank, Laporan Digital',
+        18,
+        'Fase F',
+        'XI',
+        '1 (Ganjil)',
+        'Komputer Akuntansi dan Teknologi Informasi Komunikasi (TIK)',
+      ],
+      [
+        3,
+        'Akuntansi Lembaga / Instansi Pemerintah & Perpajakan',
+        'Pada akhir fase F, peserta didik mampu memahami struktur akuntansi keuangan lembaga pemerintah, pencatatan transaksi anggaran pendapatan dan belanja daerah (APBD), serta menghitung dan menyusun formulir surat pemberitahuan (SPT) pajak PPh Pasal 21 dan PPN.',
+        '1. Menelaah struktur dokumen APBD dan akun belanja modal pemerintah daerah.\n2. Menghitung PPh Pasal 21 pegawai dan mengisi formulir SPT masa pajak secara cermat.',
+        'Tahap 1: Analisis dokumen APBD, Tahap 2: Perhitungan PTKP & tarif progresif, Tahap 3: Simulasi pengisian SPT, Tahap 4: Diskusi kepatuhan pajak',
+        'Struktur APBD, Jurnal Akuntansi Lembaga, Perhitungan PPh Pasal 21 & PPN, Pengisian Formulir SPT Pajak',
+        12,
+        'Fase F',
+        'XI',
+        '1 (Ganjil)',
+        'Perpajakan, Hukum Administrasi, dan Akuntansi Pemerintah',
+      ],
+    ];
+  }
+
+  const templateData = [
+    [templateTitle],
+    ['PETUNJUK PENGISIAN FORMAT ATP: Isi Elemen, CP, ATP / TP (bernomor, satu TP per nomor), Tahapan Alur, Lingkup Materi Pokok, Alokasi Waktu (JP), Fase, Kelas, Semester, dan Lintas Disiplin Ilmu.'],
+    ['Setiap nomor pada kolom ATP / TP menjadi satu baris ATP; tiap Tahap pada kolom Tahapan Alur dipasangkan dengan TP yang bernomor sama. Bila kosong, sistem menyusunnya otomatis dari CP dan materi.'],
+    [],
+    ['No / Unit', 'Elemen', 'CP', 'ATP / TP', 'Tahapan Alur', 'Lingkup Materi Pokok', 'Alokasi Waktu (JP)', 'Fase', 'Kelas', 'Semester', 'Lintas Disiplin Ilmu'],
+    ...sampleDataRows,
+  ];
+
+  const ws = XLSX.utils.aoa_to_sheet(templateData);
+
+  ws['!cols'] = [
+    { wch: 6 },
+    { wch: 32 },
+    { wch: 55 },
+    { wch: 45 },
+    { wch: 35 },
+    { wch: 40 },
+    { wch: 18 },
+    { wch: 10 },
+    { wch: 10 },
+    { wch: 14 },
+    { wch: 35 },
+  ];
+
+  XLSX.utils.book_append_sheet(wb, ws, 'Format_ATP_SMK_Bawang');
+  XLSX.writeFile(wb, filename);
+}
+
+// Alias untuk kompatibilitas ke belakang
+export const downloadCpExcelTemplate = downloadAtpExcelTemplate;
+
+/**
+ * 2. DOWNLOAD TEMPLATE FORMAT EXCEL RPP TERINTEGRASI (Semua Kolom Lengkap)
+ * Format terintegrasi penuh: CP, ATP/TP, Materi, Metode, Sintaks Pembelajaran, dan Asesmen.
+ */
+export function downloadRppExcelTemplate(type: 'kejuruan' | 'umum' | 'blank' = 'kejuruan') {
+  const wb = XLSX.utils.book_new();
+
+  let templateTitle = '';
+  let filename = '';
+  let sampleRows: any[][] = [];
+
+  if (type === 'umum') {
+    templateTitle = 'FORMAT EXCEL RPP DEEP LEARNING TERINTEGRASI (MAPEL UMUM) - SMK MUHAMMADIYAH BAWANG';
+    filename = 'Template_RPP_DeepLearning_Mapel_Umum_SMK_Muhammadiyah_Bawang.xlsx';
+    sampleRows = [
+      [
+        1,
+        'Menyimak dan Berbicara (Listening & Speaking)',
+        'Pada akhir fase F, peserta didik mampu menggunakan bahasa Inggris untuk berkomunikasi dalam situasi kerja dan sosial, menangani pertanyaan pelanggan (handling inquiries & complaints), berpartisipasi dalam diskusi kelompok kerja, serta melakukan presentasi proyek kejuruan dengan percaya diri.',
+        '1. Peserta didik mampu menganalisis frasa profesional dalam menangani keluhan pelanggan (handling inquiries & complaints).\n2. Peserta didik mampu mempraktikkan simulasi komunikasi percakapan kerja dengan percaya diri dan santun.',
+        'Tahap 1: Pengamatan video simulasi pelanggan, Tahap 2: Analisis frasa kunci, Tahap 3: Roleplay berpasangan, Tahap 4: Refleksi 3-2-1.',
+        'Workplace Communication: Handling Inquiries and Complaints',
+        16,
+        'F',
+        'XI',
+        '1 (Ganjil)',
+        'Bahasa Inggris Bisnis dan Pelayanan Konsumen',
+        'Minat: Percakapan interaktif, video roleplay, media sosial. Gaya belajar: campuran visual, auditori, dan kinestetik. Lingkungan: Sekitar Bawang & Batang.',
+        'Materi konseptual mengenai etika komunikasi profesional dan aplikatif berupa simulasi percakapan di tempat kerja secara langsung.',
+        'Penalaran Kritis, Kreativitas, Kolaborasi, Kemandirian, Komunikasi',
+        'Problem-Based Learning (PBL) dan Roleplay Simulation terstruktur',
+        'Mitra DUDI: Dunia Usaha & Industri Perdagangan Batang. Peran Ortu: Pendampingan rekaman video latihan mandiri.',
+        'Ruang Fisik: Kelas kolaboratif melingkar. Ruang Virtual: Google Classroom & audio script podcast digital.',
+        'Google Classroom, Google Voice Recorder, YouTube Vocational Learning',
+        '1. Guru membuka pelajaran dengan salam, doa, dan menyapa murid.\n2. Guru memeriksa kehadiran dan kesiapan emosional murid.\n3. Guru memutar cuplikan 2 menit rekaman percakapan pelanggan komplain, lalu mengajukan pertanyaan pemantik: "Bagaimana cara merespon pelanggan marah secara profesional?"\n4. Guru menyampaikan tujuan pembelajaran dan aktivitas yang akan dilakukan.',
+        'Meaningful Learning: Murid berkelompok menganalisis naskah transkrip keluhan pelanggan, membedah ungkapan empati dan solutif, serta menyusun tabel frasa profesional.',
+        'Joyful Learning: Setiap pasangan melakukan simulasi roleplay "Customer Service vs Client" dengan skenario acak menyenangkan, dilanjutkan saling memberikan umpan balik konstruktif (peer assessment).',
+        'Refleksi 3-2-1: 3 frasa kerja paling bermanfaat, 2 kesulitan artikulasi yang dihadapi, 1 strategi perbaikan. Guru memberi kesimpulan dan apresiasi.',
+        'Kuis lisan awal 5 pertanyaan singkat tentang salam dan frasa dasar percakapan kantor.',
+        'Formatif: Observasi keaktifan diskusi, rubrik penilaian pelafalan (pronunciation), kelancaran (fluency), dan kesopanan saat roleplay.',
+        'Sumatif: Unjuk kerja rekaman video roleplay skenario penanganan komplain pelanggan (LKPD 1) dan tes tertulis pemahaman teks.',
+        'Pengayaan: Penugasan menyusun naskah simulasi wawancara kerja (Job Interview). Remedial: Bimbingan pelafalan frasa dasar dengan pendampingan teman sebaya.',
+        'Tabel Analisis Ungkapan Komplain :: Situasi Kasus Komplain | Ungkapan Standar SOP Penanganan :: Barang Rusak Saat Pengiriman | We sincerely apologize for the inconvenience and will replace it immediately ; Keterlambatan Pengiriman | Let me check your tracking number and expedite the delivery ; Kesalahan Jumlah Pesanan | We will dispatch the remaining items at no additional cost',
+        'https://guru.kemdikbud.go.id/',
+        '<iframe width="100%" height="380" src="https://www.youtube.com/embed/dQw4w9WgXcQ" allowfullscreen></iframe>',
+        'https://docs.google.com/document/d/1sample-lkpd-bahasa-inggris/preview',
+        '<iframe src="https://docs.google.com/forms/d/e/1FAIpQLSc_sample/viewform?embedded=true" width="100%" height="480"></iframe>',
+        '<iframe src="https://docs.google.com/forms/d/e/1FAIpQLSc_rubrik/viewform?embedded=true" width="100%" height="480"></iframe>',
+      ],
+    ];
+  } else if (type === 'blank') {
+    templateTitle = 'FORMAT EXCEL RPP TERINTEGRASI KOSONG SIAP INPUT - SMK MUHAMMADIYAH BAWANG';
+    filename = 'Format_RPP_Terintegrasi_Kosong_SMK_Muhammadiyah_Bawang.xlsx';
+    sampleRows = [
+      [
+        1, '', '', '', '', '', 12, 'F', 'XI', '1 (Ganjil)',
+        '', '', '', 'Penalaran Kritis, Kreativitas, Kolaborasi, Kemandirian',
+        'Problem-Based Learning (PBL)', '', '', 'Google Classroom',
+        '', '', '', '', '', '', '', '', '', '', '', '', '', '',
+      ],
+    ];
+  } else {
+    templateTitle = 'FORMAT EXCEL RPP DEEP LEARNING TERINTEGRASI (MAPEL KEJURUAN AKL/TSM) - SMK MUHAMMADIYAH BAWANG';
+    filename = 'Template_RPP_DeepLearning_Kejuruan_AKL_TSM_SMK_Muhammadiyah_Bawang.xlsx';
+    sampleRows = [
+      [
+        1,
+        'Praktikum Akuntansi Perusahaan Jasa dan Dagang',
+        'Pada akhir fase F, peserta didik mampu menganalisis dokumen sumber dan pendukung transaksi keuangan, mencatat transaksi ke jurnal khusus dan umum, memposting ke buku besar utama dan pembantu, menyusun neraca lajur, serta menyusun laporan keuangan laba rugi, perubahan ekuitas, neraca, dan arus kas.',
+        '1. Peserta didik mampu menganalisis keabsahan bukti transaksi keuangan perusahaan dagang secara teliti dan kritis.\n2. Peserta didik mampu mencatat bukti transaksi ke dalam jurnal khusus (pembelian, penjualan, penerimaan, dan pengeluaran kas) sesuai SAK EMKM.',
+        'Tahap 1: Pengamatan bukti transaksi riil, Tahap 2: Analisis rekening akun debit/kredit, Tahap 3: Entri jurnal khusus kelompok, Tahap 4: Verifikasi silang saldo.',
+        'Analisis Dokumen Transaksi dan Pencatatan Jurnal Khusus Perusahaan Dagang',
+        18,
+        'F',
+        'XI',
+        '1 (Ganjil)',
+        'Akuntansi Keuangan, Matematika Bisnis, dan Manajemen Perkantoran',
+        'Minat: Literasi finansial, spreadsheet akuntansi, wirausaha. Gaya belajar: campuran visual, auditori, dan kinestetik. Lingkungan: UMKM & Lembaga Keuangan sekitar Bawang, Batang.',
+        'Materi konseptual prinsip debet-kredit yang terintegrasi secara aplikatif dengan pencatatan pembukuan riil usaha dagang/jasa.',
+        'Penalaran Kritis, Kreativitas, Kolaborasi, Kemandirian, Integritas',
+        'Problem-Based Learning (PBL) berbasis dokumen transaksi otentik',
+        'Mitra DUDI: Kantor Akuntan Publik & Bank Mini SMK Muhammadiyah Bawang. Peran Ortu: Pendampingan observasi pencatatan keuangan usaha di rumah.',
+        'Ruang Fisik: Lab Akuntansi / Bengkel Kejuruan berstandar 5S. Ruang Virtual: Google Classroom & Spreadsheet Kolaboratif.',
+        'Google Classroom, Spreadsheet Keuangan / Software Komputer Akuntansi, LCD Proyektor',
+        '1. Guru membuka pelajaran dengan salam, doa, dan mengajak murid berkesadaran.\n2. Guru memeriksa kehadiran serta kesiapan fisik dan mental murid.\n3. Guru menampilkan kuitansi dan faktur bermasalah, lalu mengajukan pertanyaan pemantik nalar kritis: "Apa dampak bagi pemilik usaha bila dokumen ini salah catat?"\n4. Guru menyampaikan tujuan pembelajaran dan aktivitas yang akan dilakukan.',
+        'Meaningful Learning: Murid berkelompok mengamati satu bundel bukti transaksi nyata. Murid mengidentifikasi nama akun, menghitung nominal, menganalisis posisi debet/kredit, dan mengisi lembar kerja analisis transaksi.',
+        'Joyful Learning: Setiap kelompok berlomba melakukan pencatatan ke lembar jurnal khusus berformat standar industri dengan pembagian peran terstruktur (analis bukti, pencatat jurnal, dan verifikator saldo), dilanjutkan verifikasi silang antar-kelompok.',
+        'Refleksi 3-2-1 & Kaizen: 3 akun yang paling sering tertukar debet/kreditnya, 2 langkah pencegahan salah catat, 1 komitmen ketelitian kerja akuntansi. Guru memberi penguatan konsep SAK EMKM.',
+        'Asesmen Awal: Tanya jawab lisan 5 butir soal mengenai saldo normal akun harta, utang, modal, pendapatan, dan beban.',
+        'Asesmen Formatif: Lembar observasi diskusi kelompok, rubrik keterampilan analisis bukti transaksi, dan ketepatan entri jurnal khusus.',
+        'Asesmen Sumatif: Penilaian hasil lembar kerja job sheet (LKPD 1) pencatatan 15 transaksi komprehensif ke jurnal khusus dan tes formatif tertulis.',
+        'Pengayaan: Penugasan entri bukti transaksi penyesuaian (adjusting entries) ke spreadsheet mandiri. Remedial: Pendampingan analisis debet-kredit dengan kartu bantu akun.',
+        'Tabel Rekapitulasi Bukti Transaksi :: Jenis Bukti Transaksi | Akun Debet / Kredit Terkait :: Faktur Penjualan No. F-01 | Piutang Dagang (D) / Penjualan (K) ; Bukti Kas Masuk No. BKM-01 | Kas di Bank (D) / Piutang Dagang (K) ; Nota Kontan Pembelian | Persediaan Barang (D) / Kas (K)',
+        'https://guru.kemdikbud.go.id/',
+        '<iframe width="100%" height="380" src="https://www.youtube.com/embed/dQw4w9WgXcQ" allowfullscreen></iframe>',
+        'https://docs.google.com/document/d/1sample-lkpd-akuntansi/preview',
+        '<iframe src="https://docs.google.com/forms/d/e/1FAIpQLSc_sample/viewform?embedded=true" width="100%" height="480"></iframe>',
+        '<iframe src="https://docs.google.com/forms/d/e/1FAIpQLSc_rubrik/viewform?embedded=true" width="100%" height="480"></iframe>',
+      ],
+      [
+        2,
+        'Komputer Akuntansi (Spreadsheet & Software Akuntansi)',
+        'Pada akhir fase F, peserta didik mampu mengoperasikan aplikasi komputer akuntansi dan spreadsheet untuk membuat data baru perusahaan, menyusun bagan akun (Chart of Accounts), mengelola kartu piutang/utang, mengentri saldo awal dan transaksi penyesuaian, serta mencetak laporan keuangan digital.',
+        '1. Peserta didik mampu membuat file data baru perusahaan dan menyusun daftar akun (Chart of Accounts) pada aplikasi akuntansi.\n2. Peserta didik mampu mengentri saldo awal neraca dan daftar pelanggan/pemasok secara presisi.',
+        'Tahap 1: Eksplorasi menu software, Tahap 2: Input profil perusahaan & COA, Tahap 3: Entri saldo buku pembantu, Tahap 4: Pengecekan keseimbangan neraca (Historical Balancing = 0).',
+        'Setup Data Baru Perusahaan dan Chart of Accounts (COA) Digital',
+        18,
+        'F',
+        'XI',
+        '1 (Ganjil)',
+        'Komputer Akuntansi dan Teknologi Informasi Terapan (TIK)',
+        'Minat: Aplikasi software komputer, spreadsheet, teknologi digital. Gaya belajar: dominan kinestetik (praktikum), didukung visual dan auditori.',
+        'Materi aplikatif praktikum komputer akuntansi yang menuntut ketelitian tinggi, pemahaman alur sistem, dan kepatuhan SOP digital.',
+        'Penalaran Kritis, Kemandirian, Kreativitas, Teliti',
+        'Project-Based Learning (PjBL) simulasi pendirian pembukuan digital perusahaan',
+        'Mitra DUDI: CV/PT Mitra Rekanan dan Software House Akuntansi. Peran Ortu: Menjaga kedisiplinan belajar komputer.',
+        'Ruang Fisik: Laboratorium Komputer SMK Muhammadiyah Bawang ber-AC dan berstandar K3LH. Ruang Virtual: Google Classroom.',
+        'Software Komputer Akuntansi, Aplikasi Spreadsheet Google Sheets / Excel, Cloud Drive',
+        '1. Guru membuka pelajaran dengan salam dan doa bersama.\n2. Guru memeriksa kehadiran dan kerapian ruang lab (budaya 5S).\n3. Guru menayangkan studi kasus perbandingan efisiensi pembukuan manual vs digital, lalu mengajukan pertanyaan pemantik: "Mengapa dunia industri saat ini beralih total ke software akuntansi?"\n4. Guru menyampaikan tujuan pembelajaran dan aktivitas yang akan dilakukan.',
+        'Meaningful Learning: Murid membuka lembar profil usaha dagang "Batang Sejahtera" dan mengikuti demonstrasi guru dalam membuat data baru perusahaan, menentukan periode akuntansi 13 bulan, serta menyusun struktur akun.',
+        'Joyful Learning: Murid secara mandiri dan saling berpasangan (peer-tutoring) menyelesaikan penginputan 35 akun dan menguji saldo awal sampai Historical Balancing menunjukkan angka 0 (seimbang).',
+        'Refleksi 3-2-1: 3 menu utama yang dikuasai, 2 kendala saat import akun, 1 trik cepat mencari selisih saldo. Guru memberikan verifikasi dan file cadangan (backup).',
+        'Asesmen Awal: Pengecekan kesiapan login akun komputer dan pengetahuan dasar penggolongan kode akun akuntansi.',
+        'Asesmen Formatif: Observasi unjuk kerja proses di komputer lab, kecepatan setup akun, dan ketepatan konfigurasi link account.',
+        'Asesmen Sumatif: Job Sheet praktik mandiri setup data awal perusahaan dan pembuatan laporan daftar akun digital.',
+        'Pengayaan: Penugasan kustomisasi format laporan neraca dan laba rugi ke bentuk PDF siap cetak. Remedial: Praktik ulang setup bagan akun dengan panduan modul bergambar.',
+        'Tabel Bagan Akun Digital :: Kode Akun (COA) | Klasifikasi & Saldo Normal :: 1-1100 Kas di Bank | Harta Lancar (Debet) ; 1-1200 Piutang Dagang | Harta Lancar (Debet) ; 2-1100 Utang Dagang | Kewajiban Lancar (Kredit)',
+        'https://guru.kemdikbud.go.id/',
+        '<iframe width="100%" height="380" src="https://www.youtube.com/embed/dQw4w9WgXcQ" allowfullscreen></iframe>',
+        'https://docs.google.com/document/d/1sample-lkpd-komputer-akuntansi/preview',
+        '<iframe src="https://docs.google.com/forms/d/e/1FAIpQLSc_sample/viewform?embedded=true" width="100%" height="480"></iframe>',
+        '<iframe src="https://docs.google.com/forms/d/e/1FAIpQLSc_rubrik/viewform?embedded=true" width="100%" height="480"></iframe>',
+      ],
+    ];
+  }
+
+  const headers = RPP_TEMPLATE_HEADERS;
+
+  const templateData = [
+    [templateTitle],
+    ['PETUNJUK PENGISIAN FORMAT RPP TERINTEGRASI: Seluruh kolom di bawah ini terhubung langsung dengan dokumen RPP Deep Learning dan ATP.'],
+    ['Setiap baris mewakili 1 Unit Dokumen RPP terpisah. Saat diunggah, dokumen cetak F4 langsung otomatis terisi sesuai kolom ini.'],
+    [],
+    headers,
+    ...sampleRows,
+  ];
+
+  const ws = XLSX.utils.aoa_to_sheet(templateData);
+
+  ws['!cols'] = RPP_TEMPLATE_WIDTHS.map((wch) => ({ wch }));
+
+  XLSX.utils.book_append_sheet(wb, ws, 'Format_RPP_Terintegrasi');
+  XLSX.writeFile(wb, filename);
+}
+
+/**
+ * Backward compatibility alias for downloading CP template
+ */
+export function downloadExcelTemplate(type: 'kejuruan' | 'umum' | 'blank' = 'kejuruan') {
+  downloadCpExcelTemplate(type);
+}
+
+/**
+ * Exports generated ATP matrix to an Excel workbook
+ */
+export function exportAtpToExcel(atpList: AlurTujuanPembelajaranItem[], identity: SchoolIdentity) {
+  const wb = XLSX.utils.book_new();
+
+  const rows = [
+    ['ALUR TUJUAN PEMBELAJARAN (ATP) - KURIKULUM MERDEKA'],
+    ['SMK MUHAMMADIYAH BAWANG, BATANG'],
+    [],
+    ['Kategori Mapel', ':', identity.kategoriMapel === 'umum' ? 'Normatif-Adaptif (Mata Pelajaran Umum)' : 'Kejuruan (Mata Pelajaran Produktif)'],
+    ['Program Keahlian', ':', identity.programKeahlian],
+    ['Konsentrasi Keahlian', ':', identity.konsentrasiKeahlian],
+    ['Mata Pelajaran', ':', identity.mataPelajaran],
+    ['Fase / Kelas / Semester', ':', `Fase ${identity.fase} / Kelas ${identity.kelas} / Semester ${identity.semester}`],
+    ['Tahun Pelajaran', ':', identity.tahunPelajaran],
+    ['Guru Pengampu', ':', `${identity.namaGuru} (NIP: ${identity.nipGuru})`],
+    [],
+    [
+      'Kode TP',
+      'Elemen',
+      'Capaian Pembelajaran (CP)',
+      'Lingkup Materi',
+      'Tujuan Pembelajaran (TP)',
+      'Alur Tujuan Pembelajaran (ATP)',
+      'Dimensi Profil Lulusan',
+      'Alokasi Waktu (JP)',
+      'Rencana Asesmen Formatif & Sumatif',
+    ],
+  ];
+
+  atpList.forEach((item) => {
+    rows.push([
+      item.kodeTp,
+      item.elemen,
+      item.capaianPembelajaran,
+      item.lingkupMateri,
+      item.tujuanPembelajaran,
+      item.alurTujuanPembelajaran,
+      item.profilPelajarPancasila.join(', '),
+      String(item.alokasiWaktuJp),
+      `Formatif: ${item.asesmenRencana.formatif} | Sumatif: ${item.asesmenRencana.sumatif}`,
+    ]);
+  });
+
+  const ws = XLSX.utils.aoa_to_sheet(rows);
+  ws['!cols'] = [
+    { wch: 10 },
+    { wch: 28 },
+    { wch: 45 },
+    { wch: 30 },
+    { wch: 45 },
+    { wch: 45 },
+    { wch: 25 },
+    { wch: 16 },
+    { wch: 40 },
+  ];
+
+  XLSX.utils.book_append_sheet(wb, ws, 'ATP_SMK_Bawang');
+  const safeSubject = identity.mataPelajaran.replace(/[^a-zA-Z0-9]/g, '_');
+  XLSX.writeFile(wb, `ATP_${safeSubject}_SMK_Muhammadiyah_Bawang_${identity.tahunPelajaran.replace('/', '-')}.xlsx`);
+}
+
+/** Tautan bawaan generator yang bukan tautan sungguhan; tidak ikut diekspor. */
+const isPlaceholderLink = (u: string | undefined): boolean =>
+  !u || u === 'https://guru.kemdikbud.go.id/' || u.includes('1sample-lkpd');
+
+/** Satukan teks Tahapan Alur milik semua butir ATP pada satu unit (id: atp-{i}-{k}, atp-rpp-{n}, atp-rpp-{n}-{k}). */
+function alurUntukUnit(atpList: AlurTujuanPembelajaranItem[] | undefined, index: number): string {
+  if (!atpList) return '';
+  return atpList
+    .filter((a) => {
+      let m = /^atp-rpp-(\d+)(?:-\d+)?$/.exec(a.id);
+      if (m) return Number(m[1]) - 1 === index;
+      m = /^atp-(\d+)-\d+$/.exec(a.id);
+      return !!m && Number(m[1]) === index;
+    })
+    .map((a) => (a.alurTujuanPembelajaran || '').trim())
+    .filter(Boolean)
+    .join('\n');
+}
+
+/** Ubah tabel eksplorasi kembali ke format sel: Judul :: Kolom1 | Kolom2 :: Data1a | Data1b ; Data2a | Data2b */
+function tabelEksplorasiKeSel(t?: { judul: string; kolom: [string, string]; data: [string, string][] }): string {
+  if (!t) return '';
+  const bersih = (v: string) => String(v ?? '').replace(/::|[|;]/g, ' - ').replace(/\s+/g, ' ').trim();
+  const baris = (t.data || []).map((r) => `${bersih(r[0])} | ${bersih(r[1])}`).join(' ; ');
+  return `${bersih(t.judul)} :: ${bersih(t.kolom[0])} | ${bersih(t.kolom[1])} :: ${baris}`;
+}
+
+/**
+ * Exports all active RPP units to the full integrated Excel format.
+ * Kolom, nama header, dan urutannya SAMA dengan template RPP Terintegrasi, sehingga hasil ekspor
+ * bisa diunggah kembali tanpa kehilangan kolom (termasuk Tahapan Alur, Tabel Eksplorasi, tautan, dan embed).
+ */
+export function exportRppToExcel(
+  modulList: ModulAjarData[],
+  identity: SchoolIdentity,
+  atpList?: AlurTujuanPembelajaranItem[]
+) {
+  const wb = XLSX.utils.book_new();
+
+  const headers = RPP_TEMPLATE_HEADERS;
+
+  const dataRows = modulList.map((m, idx) => {
+    const rpp = m.rppFormat;
+    const ident = rpp.perencanaanMendalam.identifikasi;
+    const desain = rpp.perencanaanMendalam.desainPembelajaran;
+    const peng = rpp.pengalamanBelajar;
+    const ases = rpp.asesmen;
+    const lampiran = rpp.lampiran;
+    const kerangka = desain.kerangkaPembelajaran;
+
+    const profilList: string[] = [];
+    if (ident.dimensiProfilLulusan.keimananKetakwaan) profilList.push('Keimanan dan Ketakwaan');
+    if (ident.dimensiProfilLulusan.kewargaan) profilList.push('Kewargaan');
+    if (ident.dimensiProfilLulusan.bernalarKritis) profilList.push('Penalaran Kritis');
+    if (ident.dimensiProfilLulusan.kreativitas) profilList.push('Kreativitas');
+    if (ident.dimensiProfilLulusan.kolaborasi) profilList.push('Kolaborasi');
+    if (ident.dimensiProfilLulusan.kemandirian) profilList.push('Kemandirian');
+    if (ident.dimensiProfilLulusan.kesehatan) profilList.push('Kesehatan');
+    if (ident.dimensiProfilLulusan.komunikasi) profilList.push('Komunikasi');
+
+    const peranOrtu = kerangka.kemitraanPembelajaran.orangTuaWali.peran.join(' ');
+    const kemitraan = `Mitra DUDI: ${kerangka.kemitraanPembelajaran.mitraIndustri.nama}${peranOrtu ? ` Peran Ortu: ${peranOrtu}` : ''}`;
+
+    return [
+      idx + 1,
+      m.elemenTerkait,
+      desain.capaianPembelajaran,
+      desain.tujuanPembelajaran.map((t, i) => `${i + 1}. ${t}`).join('\n'),
+      alurUntukUnit(atpList, idx),
+      m.judulMateri,
+      parseInt(m.alokasiWaktuMateri.replace(/\D/g, ''), 10) || 12,
+      identity.fase,
+      identity.kelas,
+      identity.semester,
+      desain.lintasDisiplinIlmu,
+      `Minat: ${ident.kesiapanPesertaDidik.minat} Gaya belajar: ${ident.kesiapanPesertaDidik.caraBelajar} Lingkungan: ${ident.kesiapanPesertaDidik.lingkunganTempatTinggal}`,
+      ident.karakteristikMateri.deskripsiMateri,
+      profilList.join(', '),
+      kerangka.praktikPedagogik.pbl,
+      kemitraan,
+      `Ruang Fisik: ${kerangka.lingkunganBelajar.ruangFisik.join('; ')}. Ruang Virtual: ${kerangka.lingkunganBelajar.ruangVirtual.join('; ')}.`,
+      kerangka.pemanfaatanDigital.join(', '),
+      langkahToExcelCell(getLangkahKegiatanAwal(peng, m.judulMateri)),
+      peng.kegiatanInti.memahamiBermaknaMenggembirakan.instruksiGuru,
+      peng.kegiatanInti.merefleksiBerkesadaranBermakna.instruksiAplikasi,
+      peng.kegiatanPenutup.kesimpulanDanPenguatan,
+      ases.ringkasan.asesmenAwal,
+      ases.ringkasan.asesmenProses,
+      ases.ringkasan.asesmenAkhir,
+      `Pengayaan: ${rpp.pengayaanDanRemedial.pengayaan} Remedial: ${rpp.pengayaanDanRemedial.remedial}`,
+      tabelEksplorasiKeSel(peng.kegiatanInti.memahamiBermaknaMenggembirakan.tabelEksplorasi),
+      isPlaceholderLink(lampiran?.bahanBacaan?.tautan) ? '' : lampiran.bahanBacaan.tautan,
+      lampiran?.bahanBacaan?.embedCode || '',
+      isPlaceholderLink(lampiran?.lkpd?.tautan) ? '' : lampiran.lkpd.tautan,
+      lampiran?.lkpd?.embedCode || '',
+      lampiran?.embedCodeRubrik || '',
+    ];
+  });
+
+  const fullSheet = [
+    [`REKAPITULASI RPP DEEP LEARNING TERINTEGRASI - ${identity.schoolName.toUpperCase()}`],
+    [`Mata Pelajaran: ${identity.mataPelajaran} | Kelas/Fase: ${identity.kelas}/Fase ${identity.fase} | Semester: ${identity.semester}`],
+    ['Format kolom sama dengan Template RPP Terintegrasi, sehingga file ini dapat diunggah kembali.'],
+    [],
+    headers,
+    ...dataRows,
+  ];
+
+  const ws = XLSX.utils.aoa_to_sheet(fullSheet);
+  ws['!cols'] = RPP_TEMPLATE_WIDTHS.map((wch) => ({ wch }));
+  XLSX.utils.book_append_sheet(wb, ws, 'RPP_DeepLearning');
+  const safeSubject = identity.mataPelajaran.replace(/[^a-zA-Z0-9]/g, '_');
+  XLSX.writeFile(wb, `RPP_DeepLearning_${safeSubject}_${identity.schoolName.replace(/[^a-zA-Z0-9]/g, '_')}.xlsx`);
+}
+
+/**
+ * Unduh template Excel (.xlsx) khusus untuk Tabel Hasil Eksplorasi RPP
+ */
+export function downloadTabelEksplorasiTemplate(
+  judul: string = 'Tabel Hasil Eksplorasi Data & Parameter',
+  kolom1: string = 'Parameter / Kondisi Pengamatan',
+  kolom2: string = 'Hasil Analisis & Tindakan Perbaikan',
+  sampleRows: [string, string][] = [
+    ['Pengukuran / Transaksi 1', 'Hasil Analisis & Rekomendasi 1'],
+    ['Pengukuran / Transaksi 2', 'Hasil Analisis & Rekomendasi 2'],
+    ['Pengukuran / Transaksi 3', 'Hasil Analisis & Rekomendasi 3'],
+  ]
+) {
+  const wb = XLSX.utils.book_new();
+  const sheetData = [
+    ['TABEL HASIL EKSPLORASI PENGAMATAN RPP DEEP LEARNING'],
+    [`Judul Tabel: ${judul}`],
+    [],
+    [kolom1, kolom2],
+    ...sampleRows,
+  ];
+  const ws = XLSX.utils.aoa_to_sheet(sheetData);
+  ws['!cols'] = [{ wch: 35 }, { wch: 45 }];
+  XLSX.utils.book_append_sheet(wb, ws, 'Tabel_Eksplorasi');
+  const safeTitle = judul.replace(/[^a-zA-Z0-9]/g, '_').slice(0, 30);
+  XLSX.writeFile(wb, `Template_Tabel_Eksplorasi_${safeTitle}.xlsx`);
+}
+
+/**
+ * Parse an uploaded Excel/CSV file into Tabel Eksplorasi structure:
+ * { judul: string, kolom: [string, string], data: [string, string][] }
+ */
+export async function parseTabelEksplorasiFile(file: File): Promise<{
+  judul: string;
+  kolom: [string, string];
+  data: [string, string][];
+}> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      try {
+        const data = e.target?.result;
+        const workbook = XLSX.read(data, { type: 'binary' });
+        const sheetName = workbook.SheetNames[0];
+        const worksheet = workbook.Sheets[sheetName];
+        const rawAoA: any[][] = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
+
+        if (!rawAoA || rawAoA.length === 0) {
+          throw new Error('File Excel tabel eksplorasi kosong.');
+        }
+
+        let detectedJudul = 'Tabel Hasil Eksplorasi Pengamatan Murid';
+        let headerRowIndex = -1;
+        let col1 = 'Parameter / Kondisi Pengamatan';
+        let col2 = 'Hasil Analisis & Rekomendasi';
+
+        for (let r = 0; r < Math.min(rawAoA.length, 10); r++) {
+          const row = rawAoA[r];
+          if (!Array.isArray(row)) continue;
+          const firstCell = String(row[0] || '').trim();
+          if (firstCell.toLowerCase().includes('judul') || firstCell.toLowerCase().includes('tabel')) {
+            const split = firstCell.split(':');
+            if (split.length > 1 && split[1].trim()) {
+              detectedJudul = split[1].trim();
+            } else if (firstCell.length > 5) {
+              detectedJudul = firstCell;
+            }
+          }
+          // Detect header row when there are 2 columns filled
+          if (row.length >= 2 && row[0] && row[1]) {
+            const c0 = String(row[0]).trim();
+            const c1 = String(row[1]).trim();
+            if (!c0.toLowerCase().includes('rekapitulasi') && !c0.toLowerCase().includes('tabel hasil eksplorasi pengamatan rpp')) {
+              headerRowIndex = r;
+              col1 = c0;
+              col2 = c1;
+              break;
+            }
+          }
+        }
+
+        const dataRows: [string, string][] = [];
+        const startRow = headerRowIndex !== -1 ? headerRowIndex + 1 : 0;
+        for (let r = startRow; r < rawAoA.length; r++) {
+          const row = rawAoA[r];
+          if (!Array.isArray(row) || row.length === 0) continue;
+          const val1 = String(row[0] !== undefined ? row[0] : '').trim();
+          const val2 = String(row[1] !== undefined ? row[1] : '').trim();
+          if (val1 || val2) {
+            dataRows.push([val1, val2]);
+          }
+        }
+
+        if (dataRows.length === 0) {
+          throw new Error('Tidak ditemukan baris data pada file Excel tabel eksplorasi.');
+        }
+
+        resolve({
+          judul: detectedJudul,
+          kolom: [col1, col2],
+          data: dataRows,
+        });
+      } catch (err: any) {
+        reject(err);
+      }
+    };
+    reader.onerror = (err) => reject(err);
+    reader.readAsBinaryString(file);
+  });
+}

@@ -1,0 +1,319 @@
+/* Gaya aplikasi (tanpa Tailwind). Isi sama dengan index.css, ditambah pengaman cetak di bagian akhir. */
+
+@layer base {
+  body {
+    font-family: 'Plus Jakarta Sans', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    color: #18181b;
+    background-color: #fdfbf7;
+  }
+
+  h1, h2, h3, .font-display {
+    font-family: 'Fraunces', serif;
+  }
+
+  code, pre, .font-mono {
+    font-family: 'JetBrains Mono', monospace;
+  }
+}
+
+/* Custom Neo-brutalist Shadows and borders */
+.neo-box {
+  border: 2.5px solid #000;
+  box-shadow: 4px 4px 0px #000;
+  border-radius: 0.875rem;
+  background-color: #ffffff;
+}
+
+.neo-box-sm {
+  border: 2px solid #000;
+  box-shadow: 2px 2px 0px #000;
+  border-radius: 0.75rem;
+}
+
+.neo-box-lg {
+  border: 3px solid #000;
+  box-shadow: 6px 6px 0px #000;
+  border-radius: 1rem;
+}
+
+.neo-btn {
+  border: 2px solid #000;
+  box-shadow: 3px 3px 0px #000;
+  transition: all 0.15s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.neo-btn:hover {
+  transform: translate(-1px, -1px);
+  box-shadow: 4px 4px 0px #000;
+}
+
+.neo-btn:active {
+  transform: translate(2px, 2px);
+  box-shadow: 1px 1px 0px #000;
+}
+
+/* Print specific styles for F4 / Folio Landscape rendering & high fidelity */
+@media print {
+  @page {
+    /* Standar Kertas F4 / Folio Landscape Resmi: Lebar 330mm, Tinggi 215mm */
+    size: 330mm 215mm landscape;
+    margin: 8mm 12mm 8mm 12mm;
+  }
+
+  body {
+    background-color: #ffffff !important;
+    color: #000000 !important;
+    font-size: 9.5pt !important;
+    line-height: 1.3 !important;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+
+  .no-print {
+    display: none !important;
+  }
+
+  .print-only {
+    display: block !important;
+  }
+
+  .print-container {
+    width: 100% !important;
+    max-width: 100% !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    box-shadow: none !important;
+    border: none !important;
+    background: transparent !important;
+  }
+
+  .page-break-before {
+    page-break-before: always !important;
+    break-before: page !important;
+  }
+
+  .page-break-after {
+    page-break-after: always !important;
+    break-after: page !important;
+  }
+
+  .page-break-inside-avoid {
+    page-break-inside: avoid !important;
+    break-inside: avoid !important;
+  }
+
+  table {
+    page-break-inside: auto !important;
+    width: 100% !important;
+  }
+
+  tr {
+    page-break-inside: avoid !important;
+    break-inside: avoid !important;
+  }
+
+  thead {
+    display: table-header-group !important;
+  }
+
+  /* === Cetak rapi: tanpa garis kolom terputus & tanpa judul tertinggal === */
+
+  /* Judul selalu ikut halaman yang sama dengan isi di bawahnya */
+  h1, h2, h3, h4, h5, h6 {
+    break-after: avoid !important;
+    page-break-after: avoid !important;
+  }
+
+  /* Container utama tidak boleh memotong konten antar-halaman */
+  .print-container {
+    overflow: visible !important;
+  }
+
+  /* Border pembungkus <div> ikut memanjang ke dasar halaman saat tabel terpotong.
+     Di mode cetak, garis dipindah ke tabel (border-collapse) sehingga tiap potongan
+     tabel tertutup rapi dan garis kolom menyambung di setiap halaman. */
+  .rpp-table-wrap {
+    border: 0 !important;
+    overflow: visible !important;
+  }
+
+  .rpp-table-wrap > table {
+    border: 1px solid #000 !important;
+    border-collapse: collapse !important;
+  }
+
+  /* Kotak non-tabel (grid/daftar): tiap potongan halaman digambar dengan border penuh */
+  .rpp-box {
+    overflow: visible !important;
+    -webkit-box-decoration-break: clone;
+    box-decoration-break: clone;
+  }
+
+  /* === Tabel ATP (kertas F4 landscape): kolom proporsional & Rencana Asesmen rapi === */
+  .atp-table-wrap {
+    box-shadow: none !important;
+    border-radius: 0 !important;
+  }
+
+  .atp-table {
+    min-width: 0 !important;
+    table-layout: fixed !important;
+    font-size: 8.5pt !important;
+    line-height: 1.3 !important;
+  }
+
+  .atp-table th,
+  .atp-table td {
+    padding: 5px 7px !important;
+    overflow-wrap: break-word !important;
+    word-break: normal !important;
+    vertical-align: top;
+  }
+
+  .atp-table th {
+    vertical-align: middle;
+  }
+
+  /* Rencana Asesmen: label di atas, teks selebar kolom, tiap butir tidak terpotong */
+  .atp-asesmen-item {
+    break-inside: avoid !important;
+    page-break-inside: avoid !important;
+  }
+
+  .atp-asesmen-item + .atp-asesmen-item {
+    margin-top: 5px !important;
+  }
+
+  .atp-asesmen-item p {
+    font-size: 8pt !important;
+    line-height: 1.3 !important;
+    margin-top: 2px !important;
+  }
+
+  /* Butir daftar tidak terpotong di tengah kalimat */
+  li {
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+
+  /* Ensure colors, watermarks, and borders print faithfully */
+  * {
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+}
+
+/* ==========================================================================
+   Tambahan dari modul Materi (Prompting): font heading, aksen neobrutalist,
+   latar titik vintage, dan scrollbar. Digabung ke gaya RPP di atas.
+   ========================================================================== */
+
+@layer base {
+  .font-heading {
+    font-family: 'Space Grotesk', 'Plus Jakarta Sans', sans-serif;
+  }
+
+  .font-serif-vintage {
+    font-family: 'Fraunces', Georgia, serif;
+  }
+
+  .font-mono-code {
+    font-family: 'JetBrains Mono', monospace;
+  }
+}
+
+.vintage-dot-bg {
+  background-image: radial-gradient(#d6cfc4 1px, transparent 1px);
+  background-size: 16px 16px;
+}
+
+.neo-shadow {
+  box-shadow: 3px 3px 0px #1c1917;
+}
+
+.neo-shadow-sm {
+  box-shadow: 2px 2px 0px #1c1917;
+}
+
+.neo-shadow-lg {
+  box-shadow: 5px 5px 0px #1c1917;
+}
+
+.neo-shadow-hover {
+  transition: all 0.15s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.neo-shadow-hover:hover {
+  transform: translate(-1px, -1px);
+  box-shadow: 4px 4px 0px #1c1917;
+}
+
+.neo-shadow-hover:active {
+  transform: translate(2px, 2px);
+  box-shadow: 1px 1px 0px #1c1917;
+}
+
+::-webkit-scrollbar {
+  width: 7px;
+  height: 7px;
+}
+
+::-webkit-scrollbar-track {
+  background: #f2ece1;
+  border-left: 1px solid #e4dcd0;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #c4b9a7;
+  border-radius: 4px;
+  border: 1px solid #1c1917;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #9c8e7b;
+}
+
+/* Hormati preferensi pengguna yang mengurangi animasi */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* ==========================================================================
+   PENGAMAN CETAK
+   Dimuat dari main.tsx SETELAH index.css. Bila src/index.css di repo tertukar dengan
+   berkas milik aplikasi lain (yang menyembunyikan #root saat cetak sehingga hasil cetak
+   kosong), aturan di bawah memastikan dokumen ATP/RPP tetap tercetak.
+   Selektor "html body #root" lebih spesifik daripada "#root", jadi menang meski berkas
+   lain memakai !important.
+   ========================================================================== */
+@media print {
+  html body #root {
+    display: block !important;
+    visibility: visible !important;
+    position: static !important;
+    inset: auto !important;
+    width: 100% !important;
+    height: auto !important;
+    min-height: 0 !important;
+    max-height: none !important;
+    overflow: visible !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    opacity: 1 !important;
+    transform: none !important;
+  }
+
+  html,
+  html body {
+    height: auto !important;
+    min-height: 0 !important;
+    overflow: visible !important;
+  }
+}
