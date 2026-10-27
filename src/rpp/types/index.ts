@@ -8,6 +8,10 @@ export interface ExcelRawRow {
   kelas?: string;
   semester?: string;
   lintasDisiplin?: string;
+  /** Opsional (format ATP): TP bernomor. Bila diisi, dipakai langsung sebagai butir ATP. */
+  tujuanPembelajaran?: string;
+  /** Opsional (format ATP): tahapan alur, mis. "Tahap 1 (30 menit): ...". */
+  alurPembelajaran?: string;
 }
 
 /**
@@ -31,7 +35,8 @@ export interface ExcelRppRawRow {
   profilLulusan?: string; // Dimensi profil pelajar pancasila / profil lulusan
   metodePembelajaran?: string; // Model/metode (PBL, PjBL, Inquiry, dll.)
   kemitraan?: string; // Mitra industri & Orang Tua
-  lingkunganDigital?: string; // Ruang fisik, virtual, digital tools
+  lingkunganBelajar?: string; // Lingkungan belajar: ruang fisik & ruang virtual
+  lingkunganDigital?: string; // Pemanfaatan digital: alat/aplikasi yang dipakai guru & murid
   sintaksPendahuluan?: string; // Kegiatan Awal (Mindful Learning): satu langkah per baris, atau bernomor 1. 2. 3.
   sintaksInti1?: string; // Kegiatan Inti 1 (Memahami & Eksplorasi - Meaningful)
   sintaksInti2?: string; // Kegiatan Inti 2 (Aplikasi & Refleksi - Joyful)
