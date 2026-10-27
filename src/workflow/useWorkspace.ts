@@ -487,7 +487,7 @@ export function useWorkspace() {
   };
 
   const handleExportRpp = () => {
-    exportRppToExcel(currentModulAjarList, identity);
+    exportRppToExcel(currentModulAjarList, identity, currentAtpList);
     showNotification('Seluruh unit RPP Deep Learning berhasil diekspor ke spreadsheet Excel terintegrasi (.xlsx).');
   };
 
