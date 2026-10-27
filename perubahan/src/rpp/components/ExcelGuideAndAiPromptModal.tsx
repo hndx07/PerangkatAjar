@@ -21,21 +21,26 @@ import { downloadAtpExcelTemplate, downloadRppExcelTemplate } from '../utils/exc
 interface ExcelGuideAndAiPromptModalProps {
   isOpen: boolean;
   onClose: () => void;
-  identity: SchoolIdentity;
+  /** Tidak dipakai lagi: isian prompt dikosongkan agar bisa dipakai guru dan sekolah mana pun. */
+  identity?: SchoolIdentity;
 }
 
 export const ExcelGuideAndAiPromptModal: React.FC<ExcelGuideAndAiPromptModalProps> = ({
   isOpen,
   onClose,
-  identity,
 }) => {
   const [activeTab, setActiveTab] = useState<'alur' | 'prompt' | 'skema'>('alur');
   const [activePromptType, setActivePromptType] = useState<'atp' | 'rpp'>('atp');
-  const [selectedJurusan, setSelectedJurusan] = useState<string>(identity.konsentrasiKeahlian || 'Akuntansi dan Keuangan Lembaga (AKL)');
-  const [selectedMapel, setSelectedMapel] = useState<string>(identity.mataPelajaran || 'Praktikum Akuntansi Perusahaan Jasa dan Dagang');
-  const [selectedFase, setSelectedFase] = useState<string>(identity.fase || 'F');
-  const [selectedKelas, setSelectedKelas] = useState<string>(identity.kelas || 'XI');
-  const [selectedSemester, setSelectedSemester] = useState<string>(identity.semester || '1 (Ganjil)');
+  // Semua isian dikosongkan secara bawaan; bagian yang kosong tampil sebagai [ ] di prompt
+  const [selectedJurusan, setSelectedJurusan] = useState<string>('');
+  const [selectedMapel, setSelectedMapel] = useState<string>('');
+  const [selectedFase, setSelectedFase] = useState<string>('');
+  const [selectedKelas, setSelectedKelas] = useState<string>('');
+  const [selectedSemester, setSelectedSemester] = useState<string>('');
+  const [topikMateri, setTopikMateri] = useState<string>('');
+  const [pendekatanBelajar, setPendekatanBelajar] = useState<string>('');
+  const [metodeBelajar, setMetodeBelajar] = useState<string>('');
+  const [cpAtp, setCpAtp] = useState<string>('');
   const [copiedType, setCopiedType] = useState<string | null>(null);
 
   if (!isOpen) return null;
@@ -48,103 +53,26 @@ export const ExcelGuideAndAiPromptModal: React.FC<ExcelGuideAndAiPromptModalProp
     }, 2500);
   };
 
-  // Preset Options for quick selection
-  const JURUSAN_PRESETS = [
-    {
-      jurusan: 'Akuntansi dan Keuangan Lembaga (AKL)',
-      program: 'Akuntansi dan Keuangan',
-      mapel: 'Praktikum Akuntansi Perusahaan Jasa dan Dagang',
-      mitra: 'Kantor Akuntan Publik / Bank Mini SMK / BPKAD Batang',
-      fase: 'F',
-      kelas: 'XI',
-      semester: '1 (Ganjil)',
-    },
-    {
-      jurusan: 'Teknik Sepeda Motor (TSM)',
-      program: 'Teknik Otomotif',
-      mapel: 'Pemeliharaan Mesin dan Kelistrikan Sepeda Motor',
-      mitra: 'Bengkel Resmi AHASS / Yamaha rekanan Batang',
-      fase: 'F',
-      kelas: 'XI',
-      semester: '1 (Ganjil)',
-    },
-    {
-      jurusan: 'Rekayasa Perangkat Lunak (RPL / PPLG)',
-      program: 'Pengembangan Perangkat Lunak dan Gim',
-      mapel: 'Pemrograman Web dan Perangkat Bergerak',
-      mitra: 'Software House / Startup Digital Rekanan Batang & Semarang',
-      fase: 'F',
-      kelas: 'XI',
-      semester: '1 (Ganjil)',
-    },
-    {
-      jurusan: 'Desain Komunikasi Visual (DKV)',
-      program: 'Seni dan Ekonomi Kreatif',
-      mapel: 'Desain Grafis Percetakan dan Media Interaktif',
-      mitra: 'Percetakan & Studio Kreatif Batang & Pekalongan',
-      fase: 'F',
-      kelas: 'XI',
-      semester: '1 (Ganjil)',
-    },
-    {
-      jurusan: 'Teknik Kendaraan Ringan (TKRO)',
-      program: 'Teknik Otomotif',
-      mapel: 'Pemeliharaan Sasis dan Pemindah Tenaga Kendaraan Ringan',
-      mitra: 'Bengkel Mobil Nasmoco / Auto2000 rekanan Batang',
-      fase: 'F',
-      kelas: 'XI',
-      semester: '1 (Ganjil)',
-    },
-    {
-      jurusan: 'Manajemen Perkantoran dan Layanan Bisnis (MPLB)',
-      program: 'Manajemen Perkantoran',
-      mapel: 'Otomatisasi Tata Kelola Kehumasan dan Keprotokolan',
-      mitra: 'Instansi Pemerintah Kabupaten Batang & BUMN',
-      fase: 'F',
-      kelas: 'XI',
-      semester: '1 (Ganjil)',
-    },
-    {
-      jurusan: 'Mapel Umum: Bahasa Inggris',
-      program: 'Mata Pelajaran Umum (Normatif-Adaptif)',
-      mapel: 'Bahasa Inggris Komunikasi Kerja',
-      mitra: 'Dunia Usaha dan Industri Rekanan Batang',
-      fase: 'F',
-      kelas: 'XI',
-      semester: '1 (Ganjil)',
-    },
-    {
-      jurusan: 'Mapel Umum: Matematika',
-      program: 'Mata Pelajaran Umum (Normatif-Adaptif)',
-      mapel: 'Matematika Terapan Kejuruan',
-      mitra: 'Unit Produksi dan Bengkel SMK Muhammadiyah Bawang',
-      fase: 'E',
-      kelas: 'X',
-      semester: '1 (Ganjil)',
-    },
-  ];
-
-  const handleSelectPreset = (preset: typeof JURUSAN_PRESETS[0]) => {
-    setSelectedJurusan(preset.jurusan);
-    setSelectedMapel(preset.mapel);
-    setSelectedFase(preset.fase);
-    setSelectedKelas(preset.kelas);
-    setSelectedSemester(preset.semester);
-  };
+  /** Isian kosong tampil sebagai "[ ]" agar bisa diisi langsung di chat AI. */
+  const isi = (v: string): string => (v.trim() ? v.trim() : ' ');
+  const faseKelasSemester = [selectedFase, selectedKelas, selectedSemester].some((v) => v.trim())
+    ? [selectedFase, selectedKelas, selectedSemester].map((v) => v.trim() || '…').join(' • ')
+    : ' ';
 
   // Bagian 1 prompt: nilai yang sudah diketahui dari identitas/pilihan diisikan, sisanya tetap [ ] untuk diisi guru
-  const bagian1Rpp = `* Mata pelajaran: [${selectedMapel}]
-* Topik / materi pokok: [ ]
+  const bagian1Rpp = `* Mata pelajaran: [${isi(selectedMapel)}]
+* Topik / materi pokok: [${isi(topikMateri)}]
 * Elemen CP: [ ]
-* Jurusan / konteks murid: [${selectedJurusan}]
-Fase • Kelas • Semester: [${selectedFase} • ${selectedKelas} • ${selectedSemester}]
+* Jurusan / konteks murid: [${isi(selectedJurusan)}]
+Fase • Kelas • Semester: [${faseKelasSemester}]
 Alokasi waktu: [2 JP; 1 JP = 45 menit]
 Jumlah unit (1 unit = 1 baris RPP): [1]
 
 Opsional (kosongkan bila tidak ada, nanti disusun otomatis):
-CP resmi (tempel): [ ]
+CP / ATP resmi (tempel): [${isi(cpAtp)}]
 Dimensi Profil Lulusan: [ ]
-Model / metode: [ ]
+Pendekatan belajar: [${isi(pendekatanBelajar)}]
+Model / metode belajar: [${isi(metodeBelajar)}]
 Kemitraan DUDI & orang tua: [ ]
 Tautan materi / LKPD (URL): [ ]
 Catatan khusus / materi sumber: [ ]`;
@@ -169,8 +97,8 @@ A. CARA KERJA
 B. ISI PER KOLOM (header → isi)
 - No / Unit: nomor urut (angka).
 - Elemen: dari Bagian 1.
-- CP: dari Bagian 1. Jika kosong, pakai CP resmi fase dan elemen tersebut (cari di web bila bisa), beri komentar sel "verifikasi".
-- ATP / TP: 3 TP bertingkat, bernomor, berlabel (Memahami), (Mengaplikasi), (Merefleksi), kata kerja operasional, berkonteks jurusan.
+- CP: dari Bagian 1 (CP / ATP yang saya tempel). Jika kosong, pakai CP resmi fase dan elemen tersebut (cari di web bila bisa), beri komentar sel "verifikasi".
+- ATP / TP: 3 TP bertingkat, bernomor, berlabel (Memahami), (Mengaplikasi), (Merefleksi), kata kerja operasional, berkonteks jurusan. Jika Bagian 1 memuat ATP / TP, susun 3 TP itu dari ATP tersebut tanpa mengubah maknanya.
 - Tahapan Alur: Tahap 1–3 beserta menitnya (total = alokasi waktu).
 - Lingkup Materi Pokok: topik dan sub-topik.
 - Alokasi Waktu (JP): angka saja. Fase: huruf. Kelas: angka Romawi. Semester: "1 (Ganjil)" atau "2 (Genap)".
@@ -178,7 +106,7 @@ B. ISI PER KOLOM (header → isi)
 - Kesiapan Peserta Didik: minat dan gaya belajar sebagai perkiraan, tanpa persentase karangan.
 - Karakteristik Materi: konseptual / prosedural / aplikatif.
 - Dimensi Profil Lulusan: 3–4 dimensi dari 8 ini: Keimanan dan Ketakwaan, Kewargaan, Penalaran Kritis, Kreativitas, Kolaborasi, Kemandirian, Kesehatan, Komunikasi.
-- Metode & Model: sesuai Bagian 1, atau pilih yang paling cocok.
+- Metode & Model: sesuai Bagian 1 (tulis pendekatan belajar lalu metode / model belajar), atau pilih yang paling cocok.
 - Kemitraan Industri & Orang Tua: sesuai Bagian 1. Jangan mengarang nama mitra.
 - Lingkungan Belajar: fisik dan virtual.
 - Pemanfaatan Digital: alat yang nyata dan bisa dipakai guru.
@@ -219,16 +147,18 @@ Kamu asisten penyusun Alur Tujuan Pembelajaran (ATP) Kurikulum Merdeka untuk gur
 ══════ BAGIAN 1 — ISI BAGIAN INI SAJA ══════
 (Ganti teks di dalam [ ]. Tanda * wajib diisi. Sisanya sudah ada isi bawaan atau boleh kosong.)
 
-* Mata pelajaran: [${selectedMapel}]
+* Mata pelajaran: [${isi(selectedMapel)}]
 * Elemen CP yang disusun: [semua elemen pada CP resmi, atau tulis elemen tertentu]
-* Jurusan / konteks murid: [${selectedJurusan}]
-Fase • Kelas • Semester: [${selectedFase} • ${selectedKelas} • ${selectedSemester}]
-Alokasi waktu per unit: [12 JP; 1 JP = 45 menit]
-Jumlah unit (1 unit = 1 baris ATP): [3]
+* Jurusan / konteks murid: [${isi(selectedJurusan)}]
+Fase • Kelas • Semester: [${faseKelasSemester}]
+Alokasi waktu per unit: [ ]
+Jumlah unit (1 unit = 1 baris ATP): [ ]
 
 Opsional (kosongkan bila tidak ada, nanti disusun otomatis):
-CP resmi (tempel): [ ]
-Topik / lingkup materi yang diinginkan: [ ]
+CP / ATP resmi (tempel): [${isi(cpAtp)}]
+Topik / lingkup materi yang diinginkan: [${isi(topikMateri)}]
+Pendekatan belajar: [${isi(pendekatanBelajar)}]
+Model / metode belajar: [${isi(metodeBelajar)}]
 Catatan khusus / materi sumber: [ ]
 
 ══════ BAGIAN 2 — TETAP, JANGAN DIUBAH ══════
@@ -243,8 +173,8 @@ A. CARA KERJA
 B. ISI PER KOLOM (header → isi)
 - No / Unit: nomor urut (angka).
 - Elemen: nama elemen resmi dari CP.
-- CP: teks CP resmi untuk elemen itu secara utuh, dari Bagian 1. Jika kosong, pakai CP resmi fase dan elemen tersebut (cari di web bila bisa), beri komentar sel "verifikasi".
-- ATP / TP: 3 TP bertingkat, bernomor, berlabel (Memahami), (Mengaplikasi), (Merefleksi), kata kerja operasional, berkonteks jurusan. Tiap TP satu kalimat: Kompetensi + Konten.
+- CP: teks CP resmi untuk elemen itu secara utuh, dari Bagian 1 (CP / ATP yang saya tempel). Jika kosong, pakai CP resmi fase dan elemen tersebut (cari di web bila bisa), beri komentar sel "verifikasi".
+- ATP / TP: 3 TP bertingkat, bernomor, berlabel (Memahami), (Mengaplikasi), (Merefleksi), kata kerja operasional, berkonteks jurusan. Tiap TP satu kalimat: Kompetensi + Konten. Jika Bagian 1 memuat ATP / TP, susun dari ATP tersebut tanpa mengubah maknanya.
 - Tahapan Alur: Tahap 1–3 beserta menitnya, sejajar dengan TP bernomor sama (total menit = alokasi waktu). Contoh: "Tahap 1 (30 menit): ... Tahap 2 (60 menit): ... Tahap 3 (30 menit): ...".
 - Lingkup Materi Pokok: topik dan sub-topik konkret yang dipelajari.
 - Alokasi Waktu (JP): angka saja. Fase: huruf. Kelas: angka Romawi. Semester: "1 (Ganjil)" atau "2 (Genap)".
@@ -362,7 +292,7 @@ E. PEMERIKSAAN & SERAH TERIMA
               <div className="p-4 bg-gradient-to-r from-amber-100 via-orange-50 to-emerald-100 border-2 border-black rounded-2xl shadow-[4px_4px_0px_#000]">
                 <h4 className="font-display font-black text-base text-neutral-900 mb-1 flex items-center gap-2">
                   <BookOpen className="w-5 h-5 text-amber-800" />
-                  <span>Alur Resmi Kurikulum Merdeka SMK Muhammadiyah Bawang</span>
+                  <span>Alur Resmi Kurikulum Merdeka</span>
                 </h4>
                 <p className="text-xs text-neutral-700 leading-relaxed">
                   Agar hasil file Excel dapat <strong>100% sama persis dan langsung dikenali oleh sistem aplikasi ini</strong> tanpa error, siapkan dokumen melalui 2 tahap berurutan berikut:
@@ -397,7 +327,7 @@ E. PEMERIKSAAN & SERAH TERIMA
                       </div>
                       <ol className="list-decimal pl-4 space-y-1 text-[11px] text-neutral-700">
                         <li>Buka tab <strong>"2. Generator Prompt AI"</strong> di atas.</li>
-                        <li>Pilih jurusan/mapel Anda, lalu klik <strong>"Salin Prompt AI untuk ATP"</strong>.</li>
+                        <li>Isi data pelajaran Anda (semua opsional), lalu klik <strong>"Salin Prompt AI Ini"</strong>.</li>
                         <li>Buka Gemini (gemini.google.com) atau ChatGPT, tempel prompt tersebut.</li>
                         <li>Lampirkan <strong>Template ATP (.xlsx)</strong> dari Langkah 1 ke chat AI bersama prompt, lalu AI mengisinya (11 kolom).</li>
                         <li>Unduh file <strong>.xlsx</strong> hasil AI.</li>
@@ -500,87 +430,67 @@ E. PEMERIKSAAN & SERAH TERIMA
           {activeTab === 'prompt' && (
             <div className="space-y-5 max-w-4xl mx-auto">
               
-              {/* Preset Selector */}
+              {/* Isian prompt: semua kolom kosong dan opsional */}
               <div className="p-4 bg-white border-2 border-black rounded-2xl shadow-[3px_3px_0px_#000] space-y-3">
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-2 border-b border-neutral-200">
-                  <div>
-                    <h4 className="font-display font-black text-sm text-neutral-900">
-                      Pilih Jurusan / Konsentrasi Keahlian & Mata Pelajaran:
-                    </h4>
-                    <p className="text-[11px] text-neutral-600">
-                      Prompt AI akan otomatis disesuaikan dengan kurikulum kejuruan spesifik Anda.
-                    </p>
-                  </div>
-                  <span className="text-[10px] font-mono text-emerald-800 font-bold bg-emerald-100 border border-emerald-300 px-2 py-0.5 rounded-md self-start sm:self-auto">
-                    Konteks SMK Muhammadiyah Bawang
-                  </span>
+                <div className="pb-2 border-b border-neutral-200">
+                  <h4 className="font-display font-black text-sm text-neutral-900">Isian untuk prompt AI</h4>
+                  <p className="text-[11px] text-neutral-600">
+                    Semua kolom opsional. Kolom yang dikosongkan tetap berupa [ ] di prompt dan bisa Anda isi langsung
+                    di chat AI.
+                  </p>
                 </div>
 
-                {/* Quick Presets Buttons */}
-                <div className="flex flex-wrap gap-1.5">
-                  {JURUSAN_PRESETS.map((p, idx) => (
-                    <button
-                      key={idx}
-                      onClick={() => handleSelectPreset(p)}
-                      className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all border ${
-                        selectedJurusan === p.jurusan
-                          ? 'bg-amber-400 text-black border-2 border-black shadow-[2px_2px_0px_#000] font-black'
-                          : 'bg-neutral-50 hover:bg-neutral-100 text-neutral-700 border-neutral-300'
-                      }`}
-                    >
-                      {p.jurusan.split('(')[0]}
-                    </button>
-                  ))}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
+                  <div>
+                    <label htmlFor="pr-mapel" className="font-bold text-neutral-700 block mb-0.5 text-[11px]">Mata Pelajaran</label>
+                    <input id="pr-mapel" type="text" value={selectedMapel} onChange={(e) => setSelectedMapel(e.target.value)} className="w-full px-2.5 py-1.5 border border-black rounded-lg text-xs bg-white font-medium" />
+                  </div>
+                  <div>
+                    <label htmlFor="pr-jurusan" className="font-bold text-neutral-700 block mb-0.5 text-[11px]">Jurusan / Konsentrasi (bila ada)</label>
+                    <input id="pr-jurusan" type="text" value={selectedJurusan} onChange={(e) => setSelectedJurusan(e.target.value)} className="w-full px-2.5 py-1.5 border border-black rounded-lg text-xs bg-white font-medium" />
+                  </div>
                 </div>
 
-                {/* Customized Form Fields */}
-                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-2 pt-2 text-xs">
+                <div className="grid grid-cols-3 gap-2 text-xs">
                   <div>
-                    <label className="font-bold text-neutral-700 block mb-0.5 text-[11px]">Jurusan / Konsentrasi</label>
-                    <input
-                      type="text"
-                      value={selectedJurusan}
-                      onChange={(e) => setSelectedJurusan(e.target.value)}
-                      className="w-full px-2.5 py-1.5 border border-black rounded-lg text-xs bg-white font-medium"
-                    />
+                    <label htmlFor="pr-fase" className="font-bold text-neutral-700 block mb-0.5 text-[11px]">Fase</label>
+                    <input id="pr-fase" type="text" value={selectedFase} onChange={(e) => setSelectedFase(e.target.value)} className="w-full px-2 py-1.5 border border-black rounded-lg text-xs bg-white text-center font-bold" />
                   </div>
                   <div>
-                    <label className="font-bold text-neutral-700 block mb-0.5 text-[11px]">Mata Pelajaran</label>
-                    <input
-                      type="text"
-                      value={selectedMapel}
-                      onChange={(e) => setSelectedMapel(e.target.value)}
-                      className="w-full px-2.5 py-1.5 border border-black rounded-lg text-xs bg-white font-medium"
-                    />
+                    <label htmlFor="pr-kelas" className="font-bold text-neutral-700 block mb-0.5 text-[11px]">Kelas</label>
+                    <input id="pr-kelas" type="text" value={selectedKelas} onChange={(e) => setSelectedKelas(e.target.value)} className="w-full px-2 py-1.5 border border-black rounded-lg text-xs bg-white text-center font-bold" />
                   </div>
                   <div>
-                    <label className="font-bold text-neutral-700 block mb-0.5 text-[11px]">Fase & Kelas</label>
-                    <div className="flex gap-1">
-                      <input
-                        type="text"
-                        placeholder="Fase"
-                        value={selectedFase}
-                        onChange={(e) => setSelectedFase(e.target.value)}
-                        className="w-1/2 px-2 py-1.5 border border-black rounded-lg text-xs bg-white text-center font-bold"
-                      />
-                      <input
-                        type="text"
-                        placeholder="Kelas"
-                        value={selectedKelas}
-                        onChange={(e) => setSelectedKelas(e.target.value)}
-                        className="w-1/2 px-2 py-1.5 border border-black rounded-lg text-xs bg-white text-center font-bold"
-                      />
-                    </div>
+                    <label htmlFor="pr-semester" className="font-bold text-neutral-700 block mb-0.5 text-[11px]">Semester</label>
+                    <input id="pr-semester" type="text" value={selectedSemester} onChange={(e) => setSelectedSemester(e.target.value)} className="w-full px-2 py-1.5 border border-black rounded-lg text-xs bg-white text-center font-bold" />
+                  </div>
+                </div>
+
+                <div className="text-xs">
+                  <label htmlFor="pr-topik" className="font-bold text-neutral-700 block mb-0.5 text-[11px]">Materi Pelajaran / Topik Pokok</label>
+                  <input id="pr-topik" type="text" value={topikMateri} onChange={(e) => setTopikMateri(e.target.value)} className="w-full px-2.5 py-1.5 border border-black rounded-lg text-xs bg-white font-medium" />
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
+                  <div>
+                    <label htmlFor="pr-pendekatan" className="font-bold text-neutral-700 block mb-0.5 text-[11px]">Pendekatan Belajar</label>
+                    <input id="pr-pendekatan" type="text" value={pendekatanBelajar} onChange={(e) => setPendekatanBelajar(e.target.value)} className="w-full px-2.5 py-1.5 border border-black rounded-lg text-xs bg-white font-medium" />
                   </div>
                   <div>
-                    <label className="font-bold text-neutral-700 block mb-0.5 text-[11px]">Semester</label>
-                    <input
-                      type="text"
-                      value={selectedSemester}
-                      onChange={(e) => setSelectedSemester(e.target.value)}
-                      className="w-full px-2.5 py-1.5 border border-black rounded-lg text-xs bg-white font-medium"
-                    />
+                    <label htmlFor="pr-metode" className="font-bold text-neutral-700 block mb-0.5 text-[11px]">Metode / Model Belajar</label>
+                    <input id="pr-metode" type="text" value={metodeBelajar} onChange={(e) => setMetodeBelajar(e.target.value)} className="w-full px-2.5 py-1.5 border border-black rounded-lg text-xs bg-white font-medium" />
                   </div>
+                </div>
+
+                <div className="text-xs">
+                  <label htmlFor="pr-cpatp" className="font-bold text-neutral-700 block mb-0.5 text-[11px]">CP / ATP (opsional)</label>
+                  <textarea
+                    id="pr-cpatp"
+                    rows={4}
+                    value={cpAtp}
+                    onChange={(e) => setCpAtp(e.target.value)}
+                    className="w-full px-2.5 py-1.5 border border-black rounded-lg text-xs bg-white font-medium"
+                  />
                 </div>
               </div>
 
@@ -836,8 +746,6 @@ E. PEMERIKSAAN & SERAH TERIMA
         {/* Modal Footer */}
         <div className="p-3 bg-neutral-100 border-t-2 border-black flex flex-col sm:flex-row items-center justify-between gap-2 shrink-0">
           <div className="text-[11px] font-mono text-neutral-600 flex items-center gap-1.5">
-            <span className="font-bold text-neutral-800">SMK Muhammadiyah Bawang, Batang</span>
-            <span>·</span>
             <span>developed by @hndx07</span>
           </div>
 
