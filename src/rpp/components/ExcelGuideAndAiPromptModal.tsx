@@ -132,65 +132,138 @@ export const ExcelGuideAndAiPromptModal: React.FC<ExcelGuideAndAiPromptModalProp
     setSelectedSemester(preset.semester);
   };
 
-  // Generate Prompt for ATP
-  const generatedAtpPrompt = `Anda adalah ahli kurikulum kejuruan SMK Kurikulum Merdeka (berdasarkan Keputusan Kepala BSKAP No 032/H/KR/2024 dan Panduan Pembelajaran dan Asesmen PPA 2024).
+  // Bagian 1 prompt: nilai yang sudah diketahui dari identitas/pilihan diisikan, sisanya tetap [ ] untuk diisi guru
+  const bagian1Rpp = `* Mata pelajaran: [${selectedMapel}]
+* Topik / materi pokok: [ ]
+* Elemen CP: [ ]
+* Jurusan / konteks murid: [${selectedJurusan}]
+Fase • Kelas • Semester: [${selectedFase} • ${selectedKelas} • ${selectedSemester}]
+Alokasi waktu: [2 JP; 1 JP = 45 menit]
+Jumlah unit (1 unit = 1 baris RPP): [1]
 
-TUGAS ANDA:
-Berdasarkan Capaian Pembelajaran (CP) untuk:
-- Satuan Pendidikan: SMK Muhammadiyah Bawang, Batang
-- Jurusan / Konsentrasi: ${selectedJurusan}
-- Mata Pelajaran: ${selectedMapel}
-- Fase / Kelas / Semester: Fase ${selectedFase} / Kelas ${selectedKelas} / Semester ${selectedSemester}
+Opsional (kosongkan bila tidak ada, nanti disusun otomatis):
+CP resmi (tempel): [ ]
+Dimensi Profil Lulusan: [ ]
+Model / metode: [ ]
+Kemitraan DUDI & orang tua: [ ]
+Tautan materi / LKPD (URL): [ ]
+Catatan khusus / materi sumber: [ ]`;
 
-Buatlah matriks ALUR TUJUAN PEMBELAJARAN (ATP) yang siap di-upload ke sistem aplikasi dalam bentuk tabel Markdown dengan HEADER KOLOM PERSIS SEPERTI DI BAWAH INI:
+  // Prompt RPP Deep Learning: mengisi Template RPP Terintegrasi (nama kolom sama dengan header template)
+  const generatedRppPrompt = `PERAN
+Kamu asisten penyusun perangkat ajar Kurikulum Merdeka (Pembelajaran Mendalam / Deep Learning) untuk guru SMK. Tugasmu: mengisi template Excel RPP yang saya lampirkan sampai lengkap, lalu menyerahkan file .xlsx hasilnya.
 
-| No | Elemen | Capaian Pembelajaran (CP) | Alur & Tujuan Pembelajaran (ATP / TP) | Tahapan Alur Pembelajaran | Lingkup Materi Pokok | Alokasi Waktu (JP) | Fase | Kelas | Semester | Lintas Disiplin Ilmu |
+══════ BAGIAN 1 — ISI BAGIAN INI SAJA ══════
+(Ganti teks di dalam [ ]. Tanda * wajib diisi. Sisanya sudah ada isi bawaan atau boleh kosong.)
 
-KETENTUAN PENGISIAN SETIAP KOLOM:
-1. No: Angka urut 1, 2, 3, dst.
-2. Elemen: Nama Elemen resmi dari CP BSKAP 032/H/KR/2024.
-3. Capaian Pembelajaran (CP): Teks resmi CP per elemen secara utuh.
-4. Alur & Tujuan Pembelajaran (ATP / TP): Rumuskan 2-3 Tujuan Pembelajaran per elemen dengan kaidah resmi [Kompetensi + Konten + Keterampilan Berpikir Ilmiah]. Gunakan numbering (1., 2., dst).
-5. Tahapan Alur Pembelajaran: Rangkaian alur tahapan bertahap secara linear (contoh: "Tahap 1: Pengamatan & Identifikasi, Tahap 2: Pengukuran/Praktik, Tahap 3: Analisis Data, Tahap 4: Refleksi 3-2-1").
-6. Lingkup Materi Pokok: Topik/sub-materi konkret yang dipelajari dan dipraktikkan.
-7. Alokasi Waktu (JP): Angka jam pelajaran realistis (contoh: 18, 24, 12).
-8. Fase: ${selectedFase}
-9. Kelas: ${selectedKelas}
-10. Semester: ${selectedSemester}
-11. Lintas Disiplin Ilmu: Mata pelajaran lain yang relevan dan saling mendukung.
+${bagian1Rpp}
 
-OUTPUT YANG DIINGINKAN:
-Hasilkan HANYA tabel Markdown di atas (tanpa kata pengantar atau penutup panjang) sehingga pengguna dapat langsung memblok seluruh tabel, menyalinnya (Ctrl+C), menempelkannya (Ctrl+V) ke Microsoft Excel atau Google Sheets, dan menyimpannya sebagai file .xlsx siap upload ke aplikasi SMK Muhammadiyah Bawang.`;
+══════ BAGIAN 2 — TETAP, JANGAN DIUBAH ══════
 
-  // Generate Prompt for RPP Deep Learning
-  const generatedRppPrompt = `Anda adalah konsultan pedagogis senior SMK Muhammadiyah Bawang dan pengembang RPP Kurikulum Merdeka dengan Pendekatan Pembelajaran Mendalam (Deep Learning: Mindful Learning, Meaningful Learning, dan Joyful Learning) serta sintaks PjBL / PBL.
+A. CARA KERJA
+1. Buka template Excel terlampir. Cari kolom berdasarkan TEKS HEADER di baris 5, bukan huruf kolom.
+2. Jangan ubah baris 1–5, nama sheet, maupun header. Baris 6 adalah contoh: timpa dengan unit 1. Unit berikutnya di baris 7 dst.
+3. Tulis dalam Bahasa Indonesia, sebut "murid". Alur: Memahami → Mengaplikasi → Merefleksi, dengan suasana Mindful, Meaningful, Joyful.
+4. Semua kolom harus selaras dengan Bagian 1 dan saling nyambung: TP ↔ kegiatan ↔ asesmen.
 
-TUGAS ANDA:
-Berdasarkan dokumen ATP untuk:
-- Satuan Pendidikan: SMK Muhammadiyah Bawang, Kabupaten Batang, Jawa Tengah
-- Jurusan / Konsentrasi: ${selectedJurusan}
-- Mata Pelajaran: ${selectedMapel}
-- Fase / Kelas / Semester: Fase ${selectedFase} / Kelas ${selectedKelas} / Semester ${selectedSemester}
+B. ISI PER KOLOM (header → isi)
+- No / Unit: nomor urut (angka).
+- Elemen: dari Bagian 1.
+- CP: dari Bagian 1. Jika kosong, pakai CP resmi fase dan elemen tersebut (cari di web bila bisa), beri komentar sel "verifikasi".
+- ATP / TP: 3 TP bertingkat, bernomor, berlabel (Memahami), (Mengaplikasi), (Merefleksi), kata kerja operasional, berkonteks jurusan.
+- Tahapan Alur: Tahap 1–3 beserta menitnya (total = alokasi waktu).
+- Lingkup Materi Pokok: topik dan sub-topik.
+- Alokasi Waktu (JP): angka saja. Fase: huruf. Kelas: angka Romawi. Semester: "1 (Ganjil)" atau "2 (Genap)".
+- Lintas Disiplin Ilmu: kaitan dengan program keahlian / mapel lain.
+- Kesiapan Peserta Didik: minat dan gaya belajar sebagai perkiraan, tanpa persentase karangan.
+- Karakteristik Materi: konseptual / prosedural / aplikatif.
+- Dimensi Profil Lulusan: 3–4 dimensi dari 8 ini: Keimanan dan Ketakwaan, Kewargaan, Penalaran Kritis, Kreativitas, Kolaborasi, Kemandirian, Kesehatan, Komunikasi.
+- Metode & Model: sesuai Bagian 1, atau pilih yang paling cocok.
+- Kemitraan Industri & Orang Tua: sesuai Bagian 1. Jangan mengarang nama mitra.
+- Lingkungan Belajar: fisik dan virtual.
+- Pemanfaatan Digital: alat yang nyata dan bisa dipakai guru.
+- Sintaks Pendahuluan (Mindful): 4–5 langkah bernomor: salam dan doa, cek kehadiran dan kesiapan, pertanyaan pemantik, tujuan dan alur.
+- Sintaks Inti 1 (Memahami & Eksplorasi): 3–5 langkah bernomor, dengan contoh konkret dari jurusan.
+- Sintaks Inti 2 (Mengaplikasi & Merefleksi): 3–4 langkah bernomor, aktivitas menyenangkan (game, simulasi, proyek, roleplay) plus umpan balik teman.
+- Sintaks Penutup: Refleksi 3-2-1 (3 hal dipelajari, 2 hal menarik/sulit, 1 hal ingin diperbaiki), Kaizen, dan kesimpulan guru.
+- Asesmen Awal (Diagnostik): pertanyaan atau kuis singkat pemetaan kesiapan.
+- Asesmen Proses (Formatif): instrumen dan indikator. Jika berupa kuis, tulis soal lengkap dengan opsi, kunci, dan pembahasan singkat.
+- Asesmen Akhir (Sumatif): produk atau unjuk kerja, dinilai dengan KKTP 3 level: Berkembang, Cakap, Mahir.
+- Pengayaan dan Remedial: dua kelompok, disesuaikan dengan level KKTP.
+- Tabel Hasil Eksplorasi: format wajib
+  Judul :: Kolom1 | Kolom2 :: Data1a | Data1b ; Data2a | Data2b
+  Satu tabel, 2 kolom, 4–6 baris berisi inti materi (istilah, ungkapan, rumus, atau langkah). Isi data tidak boleh mengandung "::", "|", atau ";".
+- Tautan Materi dan Tautan LKPD: URL persis dari Bagian 1. Jika tidak ada, kosongkan.
+- Kode Embed Materi dan Kode Embed LKPD: hanya bila ada URL, gunakan <iframe src="URL" width="100%" height="480" style="border:0" allowfullscreen></iframe>. Jika tidak ada URL, kosongkan.
+- Kode Embed Rubrik: satu tabel HTML, CSS inline, tanpa script dan tanpa gambar luar, memuat 3 level KKTP dan kriterianya, selaras dengan Asesmen Akhir.
 
-Buatlah tabel SPREADSHEET RPP DEEP LEARNING TERINTEGRASI LENGKAP dengan HEADER KOLOM PERSIS DI BAWAH INI:
+C. ATURAN FORMAT
+- Butir dalam satu sel ditulis bernomor "1. 2. 3." dipisah baris baru, bukan titik koma.
+- Tiap sel maksimal 32.000 karakter. Isi sel tidak boleh diawali "=", "+", atau "-".
+- Semua sel rata atas dan wrap text, header dibuat tebal, jenis font tidak diubah.
 
-| No / Unit | Elemen | Capaian Pembelajaran (CP) | Alur & Tujuan Pembelajaran (ATP / TP) | Tahapan Alur Pembelajaran | Lingkup Materi Pokok | Alokasi Waktu (JP) | Fase | Kelas | Semester | Lintas Disiplin Ilmu | Kesiapan Peserta Didik (Minat & Gaya Belajar) | Karakteristik & Sifat Materi | Dimensi Profil Lulusan / P5 | Metode & Model Pembelajaran | Kemitraan Industri & Orang Tua | Lingkungan Belajar (Fisik & Virtual) | Pemanfaatan Digital | Sintaks Pendahuluan (Mindful Learning) | Sintaks Inti 1 - Memahami & Eksplorasi (Meaningful Learning) | Tabel Hasil Eksplorasi | Sintaks Inti 2 - Mengaplikasi & Merefleksi (Joyful Learning) | Sintaks Penutup (Refleksi 3-2-1 & Kaizen) | Asesmen Awal (Diagnostik) | Asesmen Proses (Formatif) | Asesmen Akhir (Sumatif) | Pengayaan dan Remedial | Tautan Materi | Kode Embed Materi | Tautan LKPD | Kode Embed LKPD |
+D. ATURAN KEJUJURAN
+- Jangan mengarang URL, nama mitra, data murid, atau nama guru.
+- Kolom yang tidak bisa diisi dari Bagian 1: kosongkan, beri warna kuning (FFFF00) dan komentar sel "isi manual".
+- Kolom hasil susunan atau asumsi (Kesiapan, Lintas Disiplin, Kemitraan, Pengayaan/Remedial) beri komentar sel "disusun otomatis, mohon dicek".
 
-KETENTUAN KHUSUS TIAP KOLOM SESUAI SKEMA APLIKASI:
-1. Kegiatan Awal / Sintaks Pendahuluan (Mindful Learning): tulis sebagai langkah bernomor, SATU LANGKAH PER BARIS di dalam sel (1. salam, doa, dan menyapa murid; 2. memeriksa kehadiran; 3. apersepsi dengan pertanyaan pemantik; 4. menyampaikan tujuan dan aktivitas pembelajaran).
-2. Sintaks Inti 1 (Meaningful Learning): Penyelidikan masalah nyata industri Batang atau studi kasus bermakna dengan sintaks PBL / PjBL.
-3. Tabel Hasil Eksplorasi: Format string tabel pengamatan dua kolom. Tuliskan dengan format: "Judul Tabel :: Nama Kolom 1 | Nama Kolom 2 :: baris1_kol1 | baris1_kol2 ; baris2_kol1 | baris2_kol2 ; baris3_kol1 | baris3_kol2"
-   (Contoh: "Tabel Parameter Pengujian Mesin :: Parameter Indikator | Nilai Standar SOP :: Tekanan Kompresi | 1100 kPa ; Putaran Stasioner | 1400 RPM ; Tegangan Pengisian | 14.2 Volt")
-4. Sintaks Inti 2 (Joyful Learning): Pengalaman belajar menggembirakan, hands-on praktik, roleplay, uji coba produk, atau mini pameran unjuk kerja.
-5. Sintaks Penutup (Refleksi 3-2-1 & Kaizen): Evaluasi 3 hal yang dipahami, 2 pertanyaan yang masih ada, 1 tindak lanjut perbaikan mandiri.
-6. Asesmen: Rincikan asesmen awal (diagnostik kesiapan), asesmen proses (observasi kinerja kelompok), dan asesmen akhir (sumatif job sheet / tes).
-7. Tautan Materi: URL bahan ajar digital (contoh: https://guru.kemdikbud.go.id/ atau link dokumen).
-8. Kode Embed Materi: Tag iframe HTML embed video YouTube atau presentasi Google Slides (contoh: <iframe width="100%" height="380" src="https://www.youtube.com/embed/..." allowfullscreen></iframe>).
-9. Tautan LKPD: URL lembar kerja digital yang aktif diklik via hyperlink (contoh: https://docs.google.com/document/d/.../edit).
-10. Kode Embed LKPD: Tag iframe HTML embed LKPD Google Forms atau Liveworksheets.
+E. PEMERIKSAAN & SERAH TERIMA
+1. Sebelum menyerahkan, baca ulang file: semua kolom terisi (kecuali yang kuning), tidak ada sisa isi contoh lama, format Tabel Hasil Eksplorasi benar.
+2. Simpan sebagai RPP_[Mapel]_[Topik singkat].xlsx.
+3. Balas maksimal 5 baris: asumsi yang kamu buat dan sel kuning yang perlu saya isi.`;
 
-OUTPUT:
-Berikan dalam bentuk tabel Markdown terstruktur persis 1 tabel lengkap (3-4 baris materi unit pembelajaran) yang bisa di-copy paste ke Excel dalam 1 kali klik.`;
+  // Prompt ATP: struktur sama dengan prompt RPP, mengisi Template ATP (11 kolom pertama template RPP)
+  const generatedAtpPrompt = `PERAN
+Kamu asisten penyusun Alur Tujuan Pembelajaran (ATP) Kurikulum Merdeka untuk guru SMK. Tugasmu: mengisi template Excel ATP yang saya lampirkan sampai lengkap, lalu menyerahkan file .xlsx hasilnya.
+
+══════ BAGIAN 1 — ISI BAGIAN INI SAJA ══════
+(Ganti teks di dalam [ ]. Tanda * wajib diisi. Sisanya sudah ada isi bawaan atau boleh kosong.)
+
+* Mata pelajaran: [${selectedMapel}]
+* Elemen CP yang disusun: [semua elemen pada CP resmi, atau tulis elemen tertentu]
+* Jurusan / konteks murid: [${selectedJurusan}]
+Fase • Kelas • Semester: [${selectedFase} • ${selectedKelas} • ${selectedSemester}]
+Alokasi waktu per unit: [12 JP; 1 JP = 45 menit]
+Jumlah unit (1 unit = 1 baris ATP): [3]
+
+Opsional (kosongkan bila tidak ada, nanti disusun otomatis):
+CP resmi (tempel): [ ]
+Topik / lingkup materi yang diinginkan: [ ]
+Catatan khusus / materi sumber: [ ]
+
+══════ BAGIAN 2 — TETAP, JANGAN DIUBAH ══════
+
+A. CARA KERJA
+1. Buka template Excel terlampir. Cari kolom berdasarkan TEKS HEADER di baris 5, bukan huruf kolom.
+2. Jangan ubah baris 1–5, nama sheet, maupun header. Baris 6 adalah contoh: timpa dengan unit 1. Unit berikutnya di baris 7 dst.
+3. Tulis dalam Bahasa Indonesia, sebut "murid". Alur: Memahami → Mengaplikasi → Merefleksi.
+4. Semua kolom harus selaras dengan Bagian 1 dan saling nyambung: CP ↔ TP ↔ Tahapan Alur ↔ Lingkup Materi.
+5. Aplikasi membaca tiap nomor pada kolom ATP / TP sebagai satu baris ATP, dan tiap Tahap pada kolom Tahapan Alur dipasangkan dengan TP yang bernomor sama.
+
+B. ISI PER KOLOM (header → isi)
+- No / Unit: nomor urut (angka).
+- Elemen: nama elemen resmi dari CP.
+- CP: teks CP resmi untuk elemen itu secara utuh, dari Bagian 1. Jika kosong, pakai CP resmi fase dan elemen tersebut (cari di web bila bisa), beri komentar sel "verifikasi".
+- ATP / TP: 3 TP bertingkat, bernomor, berlabel (Memahami), (Mengaplikasi), (Merefleksi), kata kerja operasional, berkonteks jurusan. Tiap TP satu kalimat: Kompetensi + Konten.
+- Tahapan Alur: Tahap 1–3 beserta menitnya, sejajar dengan TP bernomor sama (total menit = alokasi waktu). Contoh: "Tahap 1 (30 menit): ... Tahap 2 (60 menit): ... Tahap 3 (30 menit): ...".
+- Lingkup Materi Pokok: topik dan sub-topik konkret yang dipelajari.
+- Alokasi Waktu (JP): angka saja. Fase: huruf. Kelas: angka Romawi. Semester: "1 (Ganjil)" atau "2 (Genap)".
+- Lintas Disiplin Ilmu: kaitan dengan program keahlian / mapel lain.
+
+C. ATURAN FORMAT
+- Butir dalam satu sel ditulis bernomor "1. 2. 3." dipisah baris baru, bukan titik koma.
+- Tiap sel maksimal 32.000 karakter. Isi sel tidak boleh diawali "=", "+", atau "-".
+- Semua sel rata atas dan wrap text, header dibuat tebal, jenis font tidak diubah.
+
+D. ATURAN KEJUJURAN
+- Jangan mengarang URL, nama mitra, data murid, atau nama guru.
+- Kolom yang tidak bisa diisi dari Bagian 1: kosongkan, beri warna kuning (FFFF00) dan komentar sel "isi manual".
+- Kolom hasil susunan atau asumsi (Lintas Disiplin, Alokasi Waktu) beri komentar sel "disusun otomatis, mohon dicek".
+
+E. PEMERIKSAAN & SERAH TERIMA
+1. Sebelum menyerahkan, baca ulang file: semua kolom terisi (kecuali yang kuning), tidak ada sisa isi contoh lama, TP bernomor dan sejajar dengan Tahap.
+2. Simpan sebagai ATP_[Mapel]_[Fase-Kelas].xlsx.
+3. Balas maksimal 5 baris: asumsi yang kamu buat dan sel kuning yang perlu saya isi.`;
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/70 backdrop-blur-xs no-print">
@@ -326,8 +399,8 @@ Berikan dalam bentuk tabel Markdown terstruktur persis 1 tabel lengkap (3-4 bari
                         <li>Buka tab <strong>"2. Generator Prompt AI"</strong> di atas.</li>
                         <li>Pilih jurusan/mapel Anda, lalu klik <strong>"Salin Prompt AI untuk ATP"</strong>.</li>
                         <li>Buka Gemini (gemini.google.com) atau ChatGPT, tempel prompt tersebut.</li>
-                        <li>AI menghasilkan tabel matriks ATP dengan 11 kolom resmi.</li>
-                        <li>Salin tabel AI, paste di Excel sel A1, simpan sebagai <strong>.xlsx</strong>.</li>
+                        <li>Lampirkan <strong>Template ATP (.xlsx)</strong> dari Langkah 1 ke chat AI bersama prompt, lalu AI mengisinya (11 kolom).</li>
+                        <li>Unduh file <strong>.xlsx</strong> hasil AI.</li>
                         <li>Upload ke aplikasi ini ➔ Dokumen ATP langsung tersusun!</li>
                       </ol>
                     </div>
@@ -373,9 +446,9 @@ Berikan dalam bentuk tabel Markdown terstruktur persis 1 tabel lengkap (3-4 bari
                       </div>
                       <ol className="list-decimal pl-4 space-y-1 text-[11px] text-neutral-700">
                         <li>Buka tab <strong>"2. Generator Prompt AI"</strong>, pilih sub-tab <strong>"Prompt RPP Deep Learning"</strong>.</li>
-                        <li>Salin prompt dan berikan baris ATP materi Anda ke Gemini / ChatGPT.</li>
-                        <li>AI menghasilkan tabel komprehensif 26 kolom (Mindful, Meaningful, Joyful, Tabel Hasil Eksplorasi, Link/Embed LKPD).</li>
-                        <li>Salin tabel jawaban AI ke Excel, simpan sebagai <strong>.xlsx</strong>.</li>
+                        <li>Salin prompt, isi Bagian 1 (topik, elemen CP, jumlah unit), lalu tempel ke Gemini / ChatGPT / Claude bersama <strong>Template RPP (.xlsx)</strong>.</li>
+                        <li>AI mengisi template komprehensif 32 kolom (Mindful, Meaningful, Joyful, Tabel Hasil Eksplorasi, Tautan &amp; Embed).</li>
+                        <li>Unduh file <strong>.xlsx</strong> hasil AI.</li>
                         <li>Upload ke aplikasi ini ➔ Seluruh unit RPP langsung terdistribusi terpisah dengan Lembar Pengesahan dan Lampiran siap cetak!</li>
                       </ol>
                     </div>
@@ -582,12 +655,11 @@ Berikan dalam bentuk tabel Markdown terstruktur persis 1 tabel lengkap (3-4 bari
                   <div className="space-y-1">
                     <strong className="block font-bold">Cara Memasukkan Hasil Jawaban AI ke Microsoft Excel / Google Sheets:</strong>
                     <ol className="list-decimal pl-4 space-y-0.5 text-[11px] text-neutral-700">
-                      <li>Buka <strong>Gemini</strong> (atau ChatGPT / Claude) dan paste prompt di atas. Jika Anda punya teks CP / ATP sendiri, lampirkan juga di chat.</li>
-                      <li>AI akan memberikan respons berupa <strong>Tabel Markdown</strong>.</li>
-                      <li>Blok seluruh tabel hasil jawaban AI dari baris header paling atas sampai baris terakhir, lalu tekan <strong>Ctrl + C (Copy)</strong>.</li>
-                      <li>Buka aplikasi Microsoft Excel atau Google Sheets, klik pada sel <strong>A1</strong>, lalu tekan <strong>Ctrl + V (Paste)</strong>.</li>
-                      <li>Simpan file dengan format <strong>Excel Workbook (.xlsx)</strong>.</li>
-                      <li>Upload file tersebut ke aplikasi ini di Langkah 1 ➔ Dokumen resmi langsung tersaji sempurna!</li>
+                      <li>Unduh <strong>Template ATP</strong> atau <strong>Template RPP</strong> dari panel "Sumber data ATP" di Langkah 1.</li>
+                      <li>Buka <strong>Gemini</strong> (atau ChatGPT / Claude), tempel prompt di atas, lalu <strong>lampirkan file template</strong>. Jika Anda punya teks CP sendiri, tempel di Bagian 1.</li>
+                      <li>Isi bagian bertanda <strong>[ ]</strong> di Bagian 1 sebelum mengirim.</li>
+                      <li>Unduh file <strong>.xlsx</strong> hasil AI. Sel berwarna <strong>kuning</strong> perlu Anda isi manual.</li>
+                      <li>Upload file tersebut ke aplikasi ini di Langkah 1 ➔ Dokumen ATP dan RPP langsung tersaji!</li>
                     </ol>
                   </div>
                 </div>
@@ -627,7 +699,7 @@ Berikan dalam bentuk tabel Markdown terstruktur persis 1 tabel lengkap (3-4 bari
                     <tbody className="divide-y divide-neutral-200 text-[11px]">
                       <tr>
                         <td className="p-2 border-r border-neutral-300 text-center font-bold">1</td>
-                        <td className="p-2 border-r border-neutral-300 font-mono font-bold text-amber-900">No / Nomor</td>
+                        <td className="p-2 border-r border-neutral-300 font-mono font-bold text-amber-900">No / Unit</td>
                         <td className="p-2 border-r border-neutral-300 text-center text-emerald-700 font-bold">Wajib</td>
                         <td className="p-2">Nomor urut elemen (1, 2, 3...)</td>
                       </tr>
@@ -639,25 +711,25 @@ Berikan dalam bentuk tabel Markdown terstruktur persis 1 tabel lengkap (3-4 bari
                       </tr>
                       <tr>
                         <td className="p-2 border-r border-neutral-300 text-center font-bold">3</td>
-                        <td className="p-2 border-r border-neutral-300 font-mono font-bold text-amber-900">Capaian Pembelajaran (CP)</td>
+                        <td className="p-2 border-r border-neutral-300 font-mono font-bold text-amber-900">CP</td>
                         <td className="p-2 border-r border-neutral-300 text-center text-emerald-700 font-bold">Wajib</td>
                         <td className="p-2">Paragraf CP resmi BSKAP No 032/H/KR/2024</td>
                       </tr>
                       <tr className="bg-neutral-50/50">
                         <td className="p-2 border-r border-neutral-300 text-center font-bold">4</td>
-                        <td className="p-2 border-r border-neutral-300 font-mono font-bold text-amber-900">Tujuan Pembelajaran (TP)</td>
+                        <td className="p-2 border-r border-neutral-300 font-mono font-bold text-amber-900">ATP / TP</td>
                         <td className="p-2 border-r border-neutral-300 text-center text-neutral-600">Opsional</td>
-                        <td className="p-2">Daftar TP terstruktur (1. Peserta didik mampu... 2. Peserta didik mampu...)</td>
+                        <td className="p-2">3 TP bertingkat, bernomor: 1. ... (Memahami) 2. ... (Mengaplikasi) 3. ... (Merefleksi). Tiap nomor menjadi satu baris ATP</td>
                       </tr>
                       <tr>
                         <td className="p-2 border-r border-neutral-300 text-center font-bold">5</td>
-                        <td className="p-2 border-r border-neutral-300 font-mono font-bold text-amber-900">Alur Pembelajaran</td>
+                        <td className="p-2 border-r border-neutral-300 font-mono font-bold text-amber-900">Tahapan Alur</td>
                         <td className="p-2 border-r border-neutral-300 text-center text-neutral-600">Opsional</td>
-                        <td className="p-2">Tahapan alur linear (Tahap 1: Pengamatan, Tahap 2: Simulasi...)</td>
+                        <td className="p-2">Tahap 1–3 beserta menitnya (Tahap 1 (30 menit): ...), sejajar dengan TP bernomor sama</td>
                       </tr>
                       <tr className="bg-neutral-50/50">
                         <td className="p-2 border-r border-neutral-300 text-center font-bold">6</td>
-                        <td className="p-2 border-r border-neutral-300 font-mono font-bold text-amber-900">Lingkup Materi / Topik</td>
+                        <td className="p-2 border-r border-neutral-300 font-mono font-bold text-amber-900">Lingkup Materi Pokok</td>
                         <td className="p-2 border-r border-neutral-300 text-center text-emerald-700 font-bold">Wajib</td>
                         <td className="p-2">Judul lingkup materi pokok yang akan menjadi unit RPP terpisah</td>
                       </tr>
@@ -715,23 +787,23 @@ Berikan dalam bentuk tabel Markdown terstruktur persis 1 tabel lengkap (3-4 bari
                       </tr>
                       <tr className="bg-neutral-50/50">
                         <td className="p-2 border-r border-neutral-300 text-center font-bold">12-14</td>
-                        <td className="p-2 border-r border-neutral-300 font-mono font-bold">Kesiapan, Karakteristik Materi, Profil Lulusan</td>
-                        <td className="p-2">Profil kesiapan belajar murid (visual/auditory/kinestetik), sifat materi konseptual/aplikatif, dan dimensi P5</td>
+                        <td className="p-2 border-r border-neutral-300 font-mono font-bold">Kesiapan Peserta Didik, Karakteristik Materi, Dimensi Profil Lulusan</td>
+                        <td className="p-2">Minat &amp; gaya belajar sebagai perkiraan (tanpa persentase), sifat materi konseptual/prosedural/aplikatif, dan 3–4 dari 8 Dimensi Profil Lulusan</td>
                       </tr>
                       <tr>
                         <td className="p-2 border-r border-neutral-300 text-center font-bold">15-18</td>
-                        <td className="p-2 border-r border-neutral-300 font-mono font-bold">Metode, Kemitraan, Lingkungan, Digital</td>
-                        <td className="p-2">Model (PBL / PjBL), Mitra industri rekanan di Kabupaten Batang, dan ruang belajar fisik/virtual</td>
+                        <td className="p-2 border-r border-neutral-300 font-mono font-bold">Metode &amp; Model, Kemitraan Industri &amp; Orang Tua, Lingkungan Belajar, Pemanfaatan Digital</td>
+                        <td className="p-2">Model (PBL / PjBL); Kemitraan: <code>Mitra DUDI: ... Peran Ortu: ...</code> (tanpa nama karangan); Lingkungan: <code>Ruang Fisik: ... Ruang Virtual: ...</code>; Digital: alat yang nyata</td>
                       </tr>
                       <tr className="bg-amber-50">
                         <td className="p-2 border-r border-neutral-300 text-center font-bold">19-22</td>
                         <td className="p-2 border-r border-neutral-300 font-mono font-bold text-amber-900">Sintaks Pembelajaran Deep Learning</td>
                         <td className="p-2">
-                          <strong>Kegiatan Awal / Sintaks Pendahuluan</strong> (Mindful; satu langkah per baris atau 1. 2. 3.), <strong>Sintaks Inti 1</strong> (Memahami & Eksplorasi Meaningful), <strong>Sintaks Inti 2</strong> (Mengaplikasi & Merefleksi Joyful), <strong>Sintaks Penutup</strong> (Refleksi 3-2-1 & Kaizen)
+                          <strong>Sintaks Pendahuluan (Mindful)</strong> (langkah bernomor 1. 2. 3.), <strong>Sintaks Inti 1</strong> (Memahami &amp; Eksplorasi), <strong>Sintaks Inti 2</strong> (Mengaplikasi &amp; Merefleksi), <strong>Sintaks Penutup</strong> (Refleksi 3-2-1, Kaizen, kesimpulan)
                         </td>
                       </tr>
                       <tr className="bg-purple-50">
-                        <td className="p-2 border-r border-neutral-300 text-center font-bold">23</td>
+                        <td className="p-2 border-r border-neutral-300 text-center font-bold">27</td>
                         <td className="p-2 border-r border-neutral-300 font-mono font-bold text-purple-900">Tabel Hasil Eksplorasi</td>
                         <td className="p-2">
                           Format: <code>Judul Tabel :: Kolom1 | Kolom2 :: baris1_k1 | baris1_k2 ; baris2_k1 | baris2_k2</code><br />
@@ -739,16 +811,16 @@ Berikan dalam bentuk tabel Markdown terstruktur persis 1 tabel lengkap (3-4 bari
                         </td>
                       </tr>
                       <tr className="bg-neutral-50/50">
-                        <td className="p-2 border-r border-neutral-300 text-center font-bold">24-26</td>
-                        <td className="p-2 border-r border-neutral-300 font-mono font-bold">Asesmen Awal, Proses, dan Akhir</td>
-                        <td className="p-2">Diagnostik kesiapan, formatif unjuk kerja kelompok, dan sumatif job sheet/proyek</td>
+                        <td className="p-2 border-r border-neutral-300 text-center font-bold">23-26</td>
+                        <td className="p-2 border-r border-neutral-300 font-mono font-bold">Asesmen Awal, Proses, Akhir, Pengayaan dan Remedial</td>
+                        <td className="p-2">Diagnostik kesiapan, formatif (kuis lengkap dengan kunci), sumatif dengan KKTP 3 level (Berkembang, Cakap, Mahir), serta dua kelompok pengayaan dan remedial</td>
                       </tr>
                       <tr className="bg-blue-50">
-                        <td className="p-2 border-r border-neutral-300 text-center font-bold">27-30</td>
-                        <td className="p-2 border-r border-neutral-300 font-mono font-bold text-blue-900">Tautan & Kode Embed (Materi & LKPD)</td>
+                        <td className="p-2 border-r border-neutral-300 text-center font-bold">28-32</td>
+                        <td className="p-2 border-r border-neutral-300 font-mono font-bold text-blue-900">Tautan &amp; Kode Embed (Materi, LKPD, Rubrik)</td>
                         <td className="p-2">
                           <strong>Tautan Materi & Tautan LKPD</strong>: URL yang aktif dibuka via hyperlink di PDF.<br />
-                          <strong>Kode Embed Materi & LKPD</strong>: Tag HTML &lt;iframe&gt; untuk pratinjau digital interaktif.
+                          <strong>Kode Embed Materi &amp; LKPD</strong>: tag HTML &lt;iframe&gt; (hanya bila ada URL). <strong>Kode Embed Rubrik</strong>: satu tabel HTML dengan CSS inline.
                         </td>
                       </tr>
                     </tbody>
