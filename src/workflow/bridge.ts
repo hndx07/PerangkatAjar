@@ -43,8 +43,8 @@ function unitIndexOfAtp(
   atpCount: number,
   modulCount: number
 ): number {
-  // Mode Excel RPP Terintegrasi: atp-rpp-{nomorUnit}
-  let m = /^atp-rpp-(\d+)$/.exec(item.id);
+  // Mode Excel RPP Terintegrasi: atp-rpp-{nomorUnit} atau atp-rpp-{nomorUnit}-{nomorTp}
+  let m = /^atp-rpp-(\d+)(?:-\d+)?$/.exec(item.id);
   if (m) return Number(m[1]) - 1;
   // Mode Excel CP: atp-{indeksBaris}-{1|2}
   m = /^atp-(\d+)-\d+$/.exec(item.id);
