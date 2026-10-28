@@ -90,6 +90,9 @@ export interface SchoolIdentity {
   nipGuru: string;
   namaKepalaSekolah: string;
   nipKepalaSekolah: string;
+  /** Jenis nomor induk yang dicetak di samping nomor guru / kepala sekolah. */
+  jenisIdGuru?: 'NBM' | 'NIP';
+  jenisIdKepalaSekolah?: 'NBM' | 'NIP';
   tanggalPenyusunan: string;
   /** Tempat penyusunan pada tanda tangan (mis. "Bawang"). Kosong/tidak ada = "Bawang". */
   tempatPenyusunan?: string;

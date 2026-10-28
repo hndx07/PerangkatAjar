@@ -16,6 +16,306 @@ function normalizeKey(str: string): string {
   return str.toLowerCase().replace(/[^a-z0-9]/g, '');
 }
 
+/** Nama kolom Template RPP Terintegrasi. Sama persis dengan nama kolom pada prompt AI. */
+export const RPP_TEMPLATE_HEADERS: string[] = [
+  'No / Unit',
+  'Elemen',
+  'CP',
+  'ATP / TP',
+  'Tahapan Alur',
+  'Lingkup Materi Pokok',
+  'Alokasi Waktu (JP)',
+  'Fase',
+  'Kelas',
+  'Semester',
+  'Lintas Disiplin Ilmu',
+  'Kesiapan Peserta Didik',
+  'Karakteristik Materi',
+  'Dimensi Profil Lulusan',
+  'Metode & Model',
+  'Kemitraan Industri & Orang Tua',
+  'Lingkungan Belajar',
+  'Pemanfaatan Digital',
+  'Sintaks Pendahuluan (Mindful)',
+  'Sintaks Inti 1 (Memahami & Eksplorasi)',
+  'Sintaks Inti 2 (Mengaplikasi & Merefleksi)',
+  'Sintaks Penutup',
+  'Asesmen Awal (Diagnostik)',
+  'Asesmen Proses (Formatif)',
+  'Asesmen Akhir (Sumatif)',
+  'Pengayaan dan Remedial',
+  'Tabel Hasil Eksplorasi',
+  'Tautan Materi',
+  'Kode Embed Materi',
+  'Tautan LKPD',
+  'Kode Embed LKPD',
+  'Kode Embed Rubrik',
+];
+
+export const RPP_TEMPLATE_WIDTHS: number[] = [8, 28, 45, 45, 35, 35, 16, 8, 8, 12, 28, 35, 35, 30, 30, 32, 30, 28, 45, 45, 45, 40, 32, 35, 35, 35, 45, 32, 40, 32, 40, 45];
+
+/**
+ * Mengurai isi lembar kerja (array of arrays) menjadi baris CP/ATP/RPP.
+ * Dipisahkan dari pembacaan berkas agar bisa diuji tanpa peramban.
+ */
+export function parseWorksheetRows(rawAoA: any[][]): ParsedExcelResult {
+  if (!rawAoA || rawAoA.length === 0) {
+    throw new Error('File Excel kosong atau tidak terbaca.');
+  }
+
+  let headerRowIndex = -1;
+  let colMap: { [key: string]: number } = {};
+  let isRppFormat = false;
+
+  // Scan the first 15 rows to find the main header
+  for (let r = 0; r < Math.min(rawAoA.length, 15); r++) {
+    const row = rawAoA[r];
+    if (!Array.isArray(row)) continue;
+
+    const rowKeys = row.map((c) => (c ? normalizeKey(String(c)) : ''));
+
+    // Check for RPP specific keys
+    const rppKeyMatches = rowKeys.filter((k) =>
+      k.includes('sintaks') ||
+      k.includes('kegiatanawal') ||
+      k.includes('metode') ||
+      k.includes('mindful') ||
+      k.includes('meaningful') ||
+      k.includes('joyful') ||
+      k.includes('pedagogik') ||
+      k.includes('kesiapan') ||
+      k.includes('asesmenawal') ||
+      k.includes('asesmenproses') ||
+      k.includes('asesmenakhir') ||
+      k.includes('diagnostik') ||
+      k.includes('sumatif') ||
+      k.includes('profillulusan')
+    );
+
+    const hasElemen = rowKeys.some((k) => k.includes('elemen') || k.includes('aspek') || k.includes('bidang'));
+    const hasCP = rowKeys.some((k) => k.includes('capaian') || k === 'cp' || k.includes('pembelajaran'));
+    const hasMateri = rowKeys.some((k) => k.includes('materi') || k.includes('konten') || k.includes('topik'));
+
+    if (rppKeyMatches.length >= 2 || (hasElemen && hasCP && rppKeyMatches.length >= 1)) {
+      headerRowIndex = r;
+      isRppFormat = true;
+    } else if ((hasElemen && (hasCP || hasMateri)) || (hasCP && hasMateri)) {
+      headerRowIndex = r;
+      isRppFormat = false;
+    }
+
+    if (headerRowIndex !== -1) {
+      rowKeys.forEach((key, idx) => {
+        // Urutan penting: kolom yang lebih spesifik dicek lebih dulu. Contoh: "Kode Embed Materi" dan
+        // "Karakteristik & Sifat Materi" mengandung "materi"; "Pengayaan" mengandung "gaya"; "Asesmen Awal
+        // (Diagnostik)" mengandung "awal" dan "no". Tanpa urutan ini kolom tersebut saling menimpa.
+        if (key.includes('asesmenawal') || key.includes('diagnostik')) colMap['asesmenAwal'] = idx;
+        else if (key.includes('asesmenproses') || key.includes('formatif') || key.includes('unjukkerja')) colMap['asesmenProses'] = idx;
+        else if (key.includes('asesmenakhir') || key.includes('sumatif')) colMap['asesmenAkhir'] = idx;
+        else if (key.includes('tautanmateri') || key.includes('linkmateri')) colMap['tautanMateri'] = idx;
+        else if (key.includes('embedmateri') || key.includes('scriptmateri') || key.includes('htmlmateri')) colMap['embedMateri'] = idx;
+        else if (key.includes('tautanlkpd') || key.includes('linklkpd')) colMap['tautanLkpd'] = idx;
+        else if (key.includes('embedlkpd') || key.includes('scriptlkpd') || key.includes('htmllkpd')) colMap['embedLkpd'] = idx;
+        else if (key.includes('embedrubrik') || key.includes('rubrikembed')) colMap['embedRubrik'] = idx;
+        else if (key.includes('pengayaan') || key.includes('remedial')) colMap['pengayaan'] = idx;
+        else if (/^(no|nomor|unit|nounit|nourut|nomorunit)$/.test(key)) colMap['no'] = idx;
+        else if (key.includes('karakteristik') || key.includes('sifat')) colMap['karakteristik'] = idx;
+        else if (key.includes('kesiapan') || key.includes('minat') || key.includes('gaya')) colMap['kesiapan'] = idx;
+        else if (key.includes('elemen') || key.includes('aspek')) colMap['elemen'] = idx;
+        else if (key.includes('capaian') || key === 'cp') colMap['cp'] = idx;
+        else if (key.includes('tujuan') || key === 'tp' || key.includes('atp')) colMap['tp'] = idx;
+        else if (key.includes('alur') || key.includes('tahapan')) colMap['alur'] = idx;
+        else if (key.includes('materi') || key.includes('konten') || key.includes('topik')) colMap['materi'] = idx;
+        else if (key.includes('waktu') || key.includes('jp') || key.includes('jam') || key.includes('alokasi')) colMap['jp'] = idx;
+        else if (key.includes('fase')) colMap['fase'] = idx;
+        else if (key.includes('kelas') || key.includes('tingkat')) colMap['kelas'] = idx;
+        else if (key.includes('semester')) colMap['semester'] = idx;
+        else if (key.includes('disiplin') || key.includes('lintas')) colMap['lintasDisiplin'] = idx;
+        else if (key.includes('profil') || key.includes('lulusan') || key.includes('p5')) colMap['profil'] = idx;
+        else if (key.includes('metode') || key.includes('model') || key.includes('pbl') || key.includes('pjbl')) colMap['metode'] = idx;
+        else if (key.includes('mitra') || key.includes('kemitraan') || key.includes('dudi')) colMap['kemitraan'] = idx;
+        else if (key.includes('lingkungan') && !key.includes('digital')) colMap['lingkungan'] = idx;
+        else if (key.includes('digital') || key.includes('pemanfaatan')) colMap['digital'] = idx;
+        else if (key.includes('pendahuluan') || key.includes('kegiatanawal') || key.includes('sintaksawal') || key === 'awal' || key.includes('mindful')) colMap['sintaksAwal'] = idx;
+        else if (key.includes('inti1') || key.includes('memahami') || key.includes('meaningful')) colMap['sintaksInti1'] = idx;
+        else if (key.includes('inti2') || key.includes('aplikasi') || key.includes('joyful') || key.includes('refleksiberkesadaran')) colMap['sintaksInti2'] = idx;
+        else if (key.includes('penutup') || key.includes('refleksi321') || key.includes('kaizen')) colMap['sintaksPenutup'] = idx;
+        else if (key.includes('tabeleksplorasi') || key.includes('hasileksplorasi') || key.includes('eksplorasi') || key.includes('datapengamatan')) colMap['tabelEksplorasi'] = idx;
+      });
+      break;
+    }
+  }
+
+  // Fallback for default CP layout if no header found
+  if (headerRowIndex === -1) {
+    headerRowIndex = 0;
+    colMap = {
+      no: 0,
+      elemen: 1,
+      cp: 2,
+      materi: 3,
+      jp: 4,
+    };
+    isRppFormat = false;
+  }
+
+  const cpRows: ExcelRawRow[] = [];
+  const rppRows: ExcelRppRawRow[] = [];
+  let detectedSubject: string | undefined;
+  let detectedClass: string | undefined;
+  let detectedPhase: string | undefined;
+  let detectedCategory: 'kejuruan' | 'umum' = 'kejuruan';
+
+  // Check top metadata rows
+  for (let r = 0; r < headerRowIndex; r++) {
+    const rowText = (rawAoA[r] || []).join(' ');
+    const lower = rowText.toLowerCase();
+    if (lower.includes('mata pelajaran') || lower.includes('mapel')) {
+      const parts = rowText.split(/[:=]/);
+      if (parts.length > 1) {
+        detectedSubject = parts[1].trim();
+        if (
+          lower.includes('indonesia') ||
+          lower.includes('matematika') ||
+          lower.includes('pancasila') ||
+          lower.includes('inggris') ||
+          lower.includes('sejarah') ||
+          lower.includes('agama') ||
+          lower.includes('pjok') ||
+          lower.includes('seni') ||
+          lower.includes('umum') ||
+          lower.includes('normatif')
+        ) {
+          detectedCategory = 'umum';
+        }
+      }
+    }
+    if (lower.includes('kelas') || lower.includes('fase')) {
+      if (rowText.includes('XI') || rowText.includes('11')) detectedClass = 'XI';
+      else if (rowText.includes('XII') || rowText.includes('12')) detectedClass = 'XII';
+      else if (rowText.includes('X') || rowText.includes('10')) detectedClass = 'X';
+
+      if (rowText.includes('Fase F') || rowText.includes('F')) detectedPhase = 'F';
+      else if (rowText.includes('Fase E') || rowText.includes('E')) detectedPhase = 'E';
+    }
+  }
+
+  // Parse content rows
+  for (let r = headerRowIndex + 1; r < rawAoA.length; r++) {
+    const row = rawAoA[r];
+    if (!row || !Array.isArray(row) || row.every((c) => c === undefined || c === null || String(c).trim() === '')) {
+      continue;
+    }
+
+    const elemenVal = colMap['elemen'] !== undefined ? String(row[colMap['elemen']] || '').trim() : '';
+    const cpVal = colMap['cp'] !== undefined ? String(row[colMap['cp']] || '').trim() : '';
+    const materiVal = colMap['materi'] !== undefined ? String(row[colMap['materi']] || '').trim() : '';
+    const jpRaw = colMap['jp'] !== undefined ? row[colMap['jp']] : '';
+    const faseVal = colMap['fase'] !== undefined ? String(row[colMap['fase']] || '').trim() : '';
+    const kelasVal = colMap['kelas'] !== undefined ? String(row[colMap['kelas']] || '').trim() : '';
+    const semesterVal = colMap['semester'] !== undefined ? String(row[colMap['semester']] || '').trim() : '';
+    const tpVal = colMap['tp'] !== undefined ? String(row[colMap['tp']] || '').trim() : '';
+    const alurVal = colMap['alur'] !== undefined ? String(row[colMap['alur']] || '').trim() : '';
+    const lintasVal = colMap['lintasDisiplin'] !== undefined ? String(row[colMap['lintasDisiplin']] || '').trim() : '';
+    const kesiapanVal = colMap['kesiapan'] !== undefined ? String(row[colMap['kesiapan']] || '').trim() : '';
+    const karakteristikVal = colMap['karakteristik'] !== undefined ? String(row[colMap['karakteristik']] || '').trim() : '';
+    const profilVal = colMap['profil'] !== undefined ? String(row[colMap['profil']] || '').trim() : '';
+    const metodeVal = colMap['metode'] !== undefined ? String(row[colMap['metode']] || '').trim() : '';
+    const kemitraanVal = colMap['kemitraan'] !== undefined ? String(row[colMap['kemitraan']] || '').trim() : '';
+    const digitalVal = colMap['digital'] !== undefined ? String(row[colMap['digital']] || '').trim() : '';
+    const lingkunganVal = colMap['lingkungan'] !== undefined ? String(row[colMap['lingkungan']] || '').trim() : '';
+    const sintaksAwalVal = colMap['sintaksAwal'] !== undefined ? String(row[colMap['sintaksAwal']] || '').trim() : '';
+    const sintaksInti1Val = colMap['sintaksInti1'] !== undefined ? String(row[colMap['sintaksInti1']] || '').trim() : '';
+    const sintaksInti2Val = colMap['sintaksInti2'] !== undefined ? String(row[colMap['sintaksInti2']] || '').trim() : '';
+    const sintaksPenutupVal = colMap['sintaksPenutup'] !== undefined ? String(row[colMap['sintaksPenutup']] || '').trim() : '';
+    const asesmenAwalVal = colMap['asesmenAwal'] !== undefined ? String(row[colMap['asesmenAwal']] || '').trim() : '';
+    const asesmenProsesVal = colMap['asesmenProses'] !== undefined ? String(row[colMap['asesmenProses']] || '').trim() : '';
+    const asesmenAkhirVal = colMap['asesmenAkhir'] !== undefined ? String(row[colMap['asesmenAkhir']] || '').trim() : '';
+    const pengayaanVal = colMap['pengayaan'] !== undefined ? String(row[colMap['pengayaan']] || '').trim() : '';
+    const tabelEksplorasiVal = colMap['tabelEksplorasi'] !== undefined ? String(row[colMap['tabelEksplorasi']] || '').trim() : '';
+    const tautanMateriVal = colMap['tautanMateri'] !== undefined ? String(row[colMap['tautanMateri']] || '').trim() : '';
+    const embedMateriVal = colMap['embedMateri'] !== undefined ? String(row[colMap['embedMateri']] || '').trim() : '';
+    const tautanLkpdVal = colMap['tautanLkpd'] !== undefined ? String(row[colMap['tautanLkpd']] || '').trim() : '';
+    const embedLkpdVal = colMap['embedLkpd'] !== undefined ? String(row[colMap['embedLkpd']] || '').trim() : '';
+    const embedRubrikVal = colMap['embedRubrik'] !== undefined ? String(row[colMap['embedRubrik']] || '').trim() : '';
+
+    // Skip purely blank or explanatory rows
+    if (!elemenVal && !cpVal && !materiVal && !tpVal) continue;
+    if (elemenVal.toLowerCase().startsWith('catatan') || elemenVal.toLowerCase().startsWith('keterangan') || elemenVal.toLowerCase().startsWith('petunjuk')) continue;
+
+    const numJp = typeof jpRaw === 'number' ? jpRaw : parseInt(String(jpRaw).replace(/\D/g, ''), 10) || 12;
+
+    const standardElemen = elemenVal || (cpRows.length > 0 ? cpRows[cpRows.length - 1].elemen : 'Elemen Pembelajaran');
+    const standardCp = cpVal || (cpRows.length > 0 ? cpRows[cpRows.length - 1].capaianPembelajaran : 'Memahami konsep dan menerapkannya dalam pemecahan masalah');
+    const standardMateri = materiVal || standardElemen || `Materi Unit ${cpRows.length + 1}`;
+
+    cpRows.push({
+      no: cpRows.length + 1,
+      elemen: standardElemen,
+      capaianPembelajaran: standardCp,
+      materi: standardMateri,
+      jp: numJp,
+      fase: faseVal || detectedPhase || 'E',
+      kelas: kelasVal || detectedClass || 'X',
+      semester: semesterVal || '1 (Ganjil)',
+      lintasDisiplin: lintasVal,
+      tujuanPembelajaran: tpVal || undefined,
+      alurPembelajaran: alurVal || undefined,
+    });
+
+    if (isRppFormat) {
+      rppRows.push({
+        no: rppRows.length + 1,
+        elemen: standardElemen,
+        capaianPembelajaran: standardCp,
+        tujuanPembelajaran: tpVal || `Peserta didik mampu menganalisis, mempraktikkan, dan memecahkan permasalahan pada materi ${standardMateri} dengan bernalar kritis dan mandiri.`,
+        alurPembelajaran: alurVal,
+        materi: standardMateri,
+        jp: numJp,
+        fase: faseVal || detectedPhase || 'E',
+        kelas: kelasVal || detectedClass || 'X',
+        semester: semesterVal || '1 (Ganjil)',
+        lintasDisiplin: lintasVal,
+        kesiapanPesertaDidik: kesiapanVal,
+        karakteristikMateri: karakteristikVal,
+        profilLulusan: profilVal || 'Penalaran Kritis, Kreativitas, Kolaborasi, Kemandirian',
+        metodePembelajaran: metodeVal || 'Problem-Based Learning (PBL) & Praktik Eksploratif',
+        kemitraan: kemitraanVal,
+        lingkunganBelajar: lingkunganVal,
+        lingkunganDigital: digitalVal,
+        sintaksPendahuluan: sintaksAwalVal,
+        sintaksInti1: sintaksInti1Val,
+        sintaksInti2: sintaksInti2Val,
+        sintaksPenutup: sintaksPenutupVal,
+        asesmenAwal: asesmenAwalVal,
+        asesmenProses: asesmenProsesVal,
+        asesmenAkhir: asesmenAkhirVal,
+        pengayaanRemedial: pengayaanVal,
+        tabelEksplorasi: tabelEksplorasiVal,
+        tautanMateri: tautanMateriVal,
+        embedMateri: embedMateriVal,
+        tautanLkpd: tautanLkpdVal,
+        embedLkpd: embedLkpdVal,
+        embedRubrik: embedRubrikVal,
+      });
+    }
+  }
+
+  if (cpRows.length === 0) {
+    throw new Error('Tidak ada data yang dapat diekstrak dari file Excel. Pastikan terdapat kolom Elemen, Capaian Pembelajaran, dan Materi.');
+  }
+
+  return {
+    fileType: isRppFormat ? 'rpp' : 'cp',
+    cpRows,
+    rppRows: isRppFormat ? rppRows : undefined,
+    detectedSubject,
+    detectedClass,
+    detectedPhase,
+    detectedCategory,
+  };
+}
+
 /**
  * Parse an uploaded Excel/CSV file into structured objects.
  * Automatically identifies whether the file is:
@@ -38,256 +338,7 @@ export async function parseExcelFile(file: File): Promise<ParsedExcelResult> {
         // Convert to array of arrays to find real header row
         const rawAoA: any[][] = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
 
-        if (!rawAoA || rawAoA.length === 0) {
-          throw new Error('File Excel kosong atau tidak terbaca.');
-        }
-
-        let headerRowIndex = -1;
-        let colMap: { [key: string]: number } = {};
-        let isRppFormat = false;
-
-        // Scan the first 15 rows to find the main header
-        for (let r = 0; r < Math.min(rawAoA.length, 15); r++) {
-          const row = rawAoA[r];
-          if (!Array.isArray(row)) continue;
-
-          const rowKeys = row.map((c) => (c ? normalizeKey(String(c)) : ''));
-
-          // Check for RPP specific keys
-          const rppKeyMatches = rowKeys.filter((k) =>
-            k.includes('sintaks') ||
-            k.includes('kegiatanawal') ||
-            k.includes('metode') ||
-            k.includes('mindful') ||
-            k.includes('meaningful') ||
-            k.includes('joyful') ||
-            k.includes('pedagogik') ||
-            k.includes('kesiapan') ||
-            k.includes('asesmenawal') ||
-            k.includes('asesmenproses') ||
-            k.includes('asesmenakhir') ||
-            k.includes('diagnostik') ||
-            k.includes('sumatif') ||
-            k.includes('profillulusan')
-          );
-
-          const hasElemen = rowKeys.some((k) => k.includes('elemen') || k.includes('aspek') || k.includes('bidang'));
-          const hasCP = rowKeys.some((k) => k.includes('capaian') || k === 'cp' || k.includes('pembelajaran'));
-          const hasMateri = rowKeys.some((k) => k.includes('materi') || k.includes('konten') || k.includes('topik'));
-
-          if (rppKeyMatches.length >= 2 || (hasElemen && hasCP && rppKeyMatches.length >= 1)) {
-            headerRowIndex = r;
-            isRppFormat = true;
-          } else if ((hasElemen && (hasCP || hasMateri)) || (hasCP && hasMateri)) {
-            headerRowIndex = r;
-            isRppFormat = false;
-          }
-
-          if (headerRowIndex !== -1) {
-            rowKeys.forEach((key, idx) => {
-              // Urutan penting: kolom yang lebih spesifik dicek lebih dulu. Contoh: "Kode Embed Materi" dan
-              // "Karakteristik & Sifat Materi" mengandung "materi"; "Pengayaan" mengandung "gaya"; "Asesmen Awal
-              // (Diagnostik)" mengandung "awal" dan "no". Tanpa urutan ini kolom tersebut saling menimpa.
-              if (key.includes('asesmenawal') || key.includes('diagnostik')) colMap['asesmenAwal'] = idx;
-              else if (key.includes('asesmenproses') || key.includes('formatif') || key.includes('unjukkerja')) colMap['asesmenProses'] = idx;
-              else if (key.includes('asesmenakhir') || key.includes('sumatif')) colMap['asesmenAkhir'] = idx;
-              else if (key.includes('tautanmateri') || key.includes('linkmateri')) colMap['tautanMateri'] = idx;
-              else if (key.includes('embedmateri') || key.includes('scriptmateri') || key.includes('htmlmateri')) colMap['embedMateri'] = idx;
-              else if (key.includes('tautanlkpd') || key.includes('linklkpd')) colMap['tautanLkpd'] = idx;
-              else if (key.includes('embedlkpd') || key.includes('scriptlkpd') || key.includes('htmllkpd')) colMap['embedLkpd'] = idx;
-              else if (key.includes('embedrubrik') || key.includes('rubrikembed')) colMap['embedRubrik'] = idx;
-              else if (key.includes('pengayaan') || key.includes('remedial')) colMap['pengayaan'] = idx;
-              else if (/^(no|nomor|unit|nounit|nourut|nomorunit)$/.test(key)) colMap['no'] = idx;
-              else if (key.includes('karakteristik') || key.includes('sifat')) colMap['karakteristik'] = idx;
-              else if (key.includes('kesiapan') || key.includes('minat') || key.includes('gaya')) colMap['kesiapan'] = idx;
-              else if (key.includes('elemen') || key.includes('aspek')) colMap['elemen'] = idx;
-              else if (key.includes('capaian') || key === 'cp') colMap['cp'] = idx;
-              else if (key.includes('tujuan') || key === 'tp' || key.includes('atp')) colMap['tp'] = idx;
-              else if (key.includes('alur') || key.includes('tahapan')) colMap['alur'] = idx;
-              else if (key.includes('materi') || key.includes('konten') || key.includes('topik')) colMap['materi'] = idx;
-              else if (key.includes('waktu') || key.includes('jp') || key.includes('jam') || key.includes('alokasi')) colMap['jp'] = idx;
-              else if (key.includes('fase')) colMap['fase'] = idx;
-              else if (key.includes('kelas') || key.includes('tingkat')) colMap['kelas'] = idx;
-              else if (key.includes('semester')) colMap['semester'] = idx;
-              else if (key.includes('disiplin') || key.includes('lintas')) colMap['lintasDisiplin'] = idx;
-              else if (key.includes('profil') || key.includes('lulusan') || key.includes('p5')) colMap['profil'] = idx;
-              else if (key.includes('metode') || key.includes('model') || key.includes('pbl') || key.includes('pjbl')) colMap['metode'] = idx;
-              else if (key.includes('mitra') || key.includes('kemitraan') || key.includes('dudi')) colMap['kemitraan'] = idx;
-              else if (key.includes('digital') || key.includes('lingkungan')) colMap['digital'] = idx;
-              else if (key.includes('pendahuluan') || key.includes('kegiatanawal') || key.includes('sintaksawal') || key === 'awal' || key.includes('mindful')) colMap['sintaksAwal'] = idx;
-              else if (key.includes('inti1') || key.includes('memahami') || key.includes('meaningful')) colMap['sintaksInti1'] = idx;
-              else if (key.includes('inti2') || key.includes('aplikasi') || key.includes('joyful') || key.includes('refleksiberkesadaran')) colMap['sintaksInti2'] = idx;
-              else if (key.includes('penutup') || key.includes('refleksi321') || key.includes('kaizen')) colMap['sintaksPenutup'] = idx;
-              else if (key.includes('tabeleksplorasi') || key.includes('hasileksplorasi') || key.includes('eksplorasi') || key.includes('datapengamatan')) colMap['tabelEksplorasi'] = idx;
-            });
-            break;
-          }
-        }
-
-        // Fallback for default CP layout if no header found
-        if (headerRowIndex === -1) {
-          headerRowIndex = 0;
-          colMap = {
-            no: 0,
-            elemen: 1,
-            cp: 2,
-            materi: 3,
-            jp: 4,
-          };
-          isRppFormat = false;
-        }
-
-        const cpRows: ExcelRawRow[] = [];
-        const rppRows: ExcelRppRawRow[] = [];
-        let detectedSubject: string | undefined;
-        let detectedClass: string | undefined;
-        let detectedPhase: string | undefined;
-        let detectedCategory: 'kejuruan' | 'umum' = 'kejuruan';
-
-        // Check top metadata rows
-        for (let r = 0; r < headerRowIndex; r++) {
-          const rowText = (rawAoA[r] || []).join(' ');
-          const lower = rowText.toLowerCase();
-          if (lower.includes('mata pelajaran') || lower.includes('mapel')) {
-            const parts = rowText.split(/[:=]/);
-            if (parts.length > 1) {
-              detectedSubject = parts[1].trim();
-              if (
-                lower.includes('indonesia') ||
-                lower.includes('matematika') ||
-                lower.includes('pancasila') ||
-                lower.includes('inggris') ||
-                lower.includes('sejarah') ||
-                lower.includes('agama') ||
-                lower.includes('pjok') ||
-                lower.includes('seni') ||
-                lower.includes('umum') ||
-                lower.includes('normatif')
-              ) {
-                detectedCategory = 'umum';
-              }
-            }
-          }
-          if (lower.includes('kelas') || lower.includes('fase')) {
-            if (rowText.includes('XI') || rowText.includes('11')) detectedClass = 'XI';
-            else if (rowText.includes('XII') || rowText.includes('12')) detectedClass = 'XII';
-            else if (rowText.includes('X') || rowText.includes('10')) detectedClass = 'X';
-
-            if (rowText.includes('Fase F') || rowText.includes('F')) detectedPhase = 'F';
-            else if (rowText.includes('Fase E') || rowText.includes('E')) detectedPhase = 'E';
-          }
-        }
-
-        // Parse content rows
-        for (let r = headerRowIndex + 1; r < rawAoA.length; r++) {
-          const row = rawAoA[r];
-          if (!row || !Array.isArray(row) || row.every((c) => c === undefined || c === null || String(c).trim() === '')) {
-            continue;
-          }
-
-          const elemenVal = colMap['elemen'] !== undefined ? String(row[colMap['elemen']] || '').trim() : '';
-          const cpVal = colMap['cp'] !== undefined ? String(row[colMap['cp']] || '').trim() : '';
-          const materiVal = colMap['materi'] !== undefined ? String(row[colMap['materi']] || '').trim() : '';
-          const jpRaw = colMap['jp'] !== undefined ? row[colMap['jp']] : '';
-          const faseVal = colMap['fase'] !== undefined ? String(row[colMap['fase']] || '').trim() : '';
-          const kelasVal = colMap['kelas'] !== undefined ? String(row[colMap['kelas']] || '').trim() : '';
-          const semesterVal = colMap['semester'] !== undefined ? String(row[colMap['semester']] || '').trim() : '';
-          const tpVal = colMap['tp'] !== undefined ? String(row[colMap['tp']] || '').trim() : '';
-          const alurVal = colMap['alur'] !== undefined ? String(row[colMap['alur']] || '').trim() : '';
-          const lintasVal = colMap['lintasDisiplin'] !== undefined ? String(row[colMap['lintasDisiplin']] || '').trim() : '';
-          const kesiapanVal = colMap['kesiapan'] !== undefined ? String(row[colMap['kesiapan']] || '').trim() : '';
-          const karakteristikVal = colMap['karakteristik'] !== undefined ? String(row[colMap['karakteristik']] || '').trim() : '';
-          const profilVal = colMap['profil'] !== undefined ? String(row[colMap['profil']] || '').trim() : '';
-          const metodeVal = colMap['metode'] !== undefined ? String(row[colMap['metode']] || '').trim() : '';
-          const kemitraanVal = colMap['kemitraan'] !== undefined ? String(row[colMap['kemitraan']] || '').trim() : '';
-          const digitalVal = colMap['digital'] !== undefined ? String(row[colMap['digital']] || '').trim() : '';
-          const sintaksAwalVal = colMap['sintaksAwal'] !== undefined ? String(row[colMap['sintaksAwal']] || '').trim() : '';
-          const sintaksInti1Val = colMap['sintaksInti1'] !== undefined ? String(row[colMap['sintaksInti1']] || '').trim() : '';
-          const sintaksInti2Val = colMap['sintaksInti2'] !== undefined ? String(row[colMap['sintaksInti2']] || '').trim() : '';
-          const sintaksPenutupVal = colMap['sintaksPenutup'] !== undefined ? String(row[colMap['sintaksPenutup']] || '').trim() : '';
-          const asesmenAwalVal = colMap['asesmenAwal'] !== undefined ? String(row[colMap['asesmenAwal']] || '').trim() : '';
-          const asesmenProsesVal = colMap['asesmenProses'] !== undefined ? String(row[colMap['asesmenProses']] || '').trim() : '';
-          const asesmenAkhirVal = colMap['asesmenAkhir'] !== undefined ? String(row[colMap['asesmenAkhir']] || '').trim() : '';
-          const pengayaanVal = colMap['pengayaan'] !== undefined ? String(row[colMap['pengayaan']] || '').trim() : '';
-          const tabelEksplorasiVal = colMap['tabelEksplorasi'] !== undefined ? String(row[colMap['tabelEksplorasi']] || '').trim() : '';
-          const tautanMateriVal = colMap['tautanMateri'] !== undefined ? String(row[colMap['tautanMateri']] || '').trim() : '';
-          const embedMateriVal = colMap['embedMateri'] !== undefined ? String(row[colMap['embedMateri']] || '').trim() : '';
-          const tautanLkpdVal = colMap['tautanLkpd'] !== undefined ? String(row[colMap['tautanLkpd']] || '').trim() : '';
-          const embedLkpdVal = colMap['embedLkpd'] !== undefined ? String(row[colMap['embedLkpd']] || '').trim() : '';
-          const embedRubrikVal = colMap['embedRubrik'] !== undefined ? String(row[colMap['embedRubrik']] || '').trim() : '';
-
-          // Skip purely blank or explanatory rows
-          if (!elemenVal && !cpVal && !materiVal && !tpVal) continue;
-          if (elemenVal.toLowerCase().startsWith('catatan') || elemenVal.toLowerCase().startsWith('keterangan') || elemenVal.toLowerCase().startsWith('petunjuk')) continue;
-
-          const numJp = typeof jpRaw === 'number' ? jpRaw : parseInt(String(jpRaw).replace(/\D/g, ''), 10) || 12;
-
-          const standardElemen = elemenVal || (cpRows.length > 0 ? cpRows[cpRows.length - 1].elemen : 'Elemen Pembelajaran');
-          const standardCp = cpVal || (cpRows.length > 0 ? cpRows[cpRows.length - 1].capaianPembelajaran : 'Memahami konsep dan menerapkannya dalam pemecahan masalah');
-          const standardMateri = materiVal || standardElemen || `Materi Unit ${cpRows.length + 1}`;
-
-          cpRows.push({
-            no: cpRows.length + 1,
-            elemen: standardElemen,
-            capaianPembelajaran: standardCp,
-            materi: standardMateri,
-            jp: numJp,
-            fase: faseVal || detectedPhase || 'E',
-            kelas: kelasVal || detectedClass || 'X',
-            semester: semesterVal || '1 (Ganjil)',
-            lintasDisiplin: lintasVal,
-          });
-
-          if (isRppFormat) {
-            rppRows.push({
-              no: rppRows.length + 1,
-              elemen: standardElemen,
-              capaianPembelajaran: standardCp,
-              tujuanPembelajaran: tpVal || `Peserta didik mampu menganalisis, mempraktikkan, dan memecahkan permasalahan pada materi ${standardMateri} dengan bernalar kritis dan mandiri.`,
-              alurPembelajaran: alurVal,
-              materi: standardMateri,
-              jp: numJp,
-              fase: faseVal || detectedPhase || 'E',
-              kelas: kelasVal || detectedClass || 'X',
-              semester: semesterVal || '1 (Ganjil)',
-              lintasDisiplin: lintasVal,
-              kesiapanPesertaDidik: kesiapanVal,
-              karakteristikMateri: karakteristikVal,
-              profilLulusan: profilVal || 'Bernalar Kritis, Kreativitas, Kolaborasi, Kemandirian',
-              metodePembelajaran: metodeVal || 'Problem-Based Learning (PBL) & Praktik Eksploratif',
-              kemitraan: kemitraanVal,
-              lingkunganDigital: digitalVal,
-              sintaksPendahuluan: sintaksAwalVal,
-              sintaksInti1: sintaksInti1Val,
-              sintaksInti2: sintaksInti2Val,
-              sintaksPenutup: sintaksPenutupVal,
-              asesmenAwal: asesmenAwalVal,
-              asesmenProses: asesmenProsesVal,
-              asesmenAkhir: asesmenAkhirVal,
-              pengayaanRemedial: pengayaanVal,
-              tabelEksplorasi: tabelEksplorasiVal,
-              tautanMateri: tautanMateriVal,
-              embedMateri: embedMateriVal,
-              tautanLkpd: tautanLkpdVal,
-              embedLkpd: embedLkpdVal,
-              embedRubrik: embedRubrikVal,
-            });
-          }
-        }
-
-        if (cpRows.length === 0) {
-          throw new Error('Tidak ada data yang dapat diekstrak dari file Excel. Pastikan terdapat kolom Elemen, Capaian Pembelajaran, dan Materi.');
-        }
-
-        resolve({
-          fileType: isRppFormat ? 'rpp' : 'cp',
-          cpRows,
-          rppRows: isRppFormat ? rppRows : undefined,
-          detectedSubject,
-          detectedClass,
-          detectedPhase,
-          detectedCategory,
-        });
+        resolve(parseWorksheetRows(rawAoA));
       } catch (err: any) {
         reject(new Error(err.message || 'Gagal memproses file Excel'));
       }
@@ -409,10 +460,10 @@ export function downloadAtpExcelTemplate(type: 'kejuruan' | 'umum' | 'blank' = '
 
   const templateData = [
     [templateTitle],
-    ['PETUNJUK: Isi Elemen, Capaian Pembelajaran (CP), Alur & Tujuan Pembelajaran (ATP/TP), Lingkup Materi / Topik, Alokasi Waktu (JP), dan Lintas Disiplin.'],
-    ['Sistem akan secara otomatis menyusun matriks ATP dan mendistribusikannya ke lembar RPP terpisah.'],
+    ['PETUNJUK PENGISIAN FORMAT ATP: Isi Elemen, CP, ATP / TP (bernomor, satu TP per nomor), Tahapan Alur, Lingkup Materi Pokok, Alokasi Waktu (JP), Fase, Kelas, Semester, dan Lintas Disiplin Ilmu.'],
+    ['Setiap nomor pada kolom ATP / TP menjadi satu baris ATP; tiap Tahap pada kolom Tahapan Alur dipasangkan dengan TP yang bernomor sama. Bila kosong, sistem menyusunnya otomatis dari CP dan materi.'],
     [],
-    ['No', 'Elemen', 'Capaian Pembelajaran (CP)', 'Alur & Tujuan Pembelajaran (ATP / TP)', 'Tahapan Alur Pembelajaran', 'Lingkup Materi / Topik', 'Alokasi Waktu (JP)', 'Fase', 'Kelas', 'Semester', 'Lintas Disiplin Ilmu'],
+    ['No / Unit', 'Elemen', 'CP', 'ATP / TP', 'Tahapan Alur', 'Lingkup Materi Pokok', 'Alokasi Waktu (JP)', 'Fase', 'Kelas', 'Semester', 'Lintas Disiplin Ilmu'],
     ...sampleDataRows,
   ];
 
@@ -466,9 +517,9 @@ export function downloadRppExcelTemplate(type: 'kejuruan' | 'umum' | 'blank' = '
         'XI',
         '1 (Ganjil)',
         'Bahasa Inggris Bisnis dan Pelayanan Konsumen',
-        'Minat: Percakapan interaktif, video roleplay, media sosial. 40% Visual, 40% Auditory, 20% Kinestetik. Lingkungan: Sekitar Bawang & Batang.',
+        'Minat: Percakapan interaktif, video roleplay, media sosial. Gaya belajar: campuran visual, auditori, dan kinestetik. Lingkungan: Sekitar Bawang & Batang.',
         'Materi konseptual mengenai etika komunikasi profesional dan aplikatif berupa simulasi percakapan di tempat kerja secara langsung.',
-        'Bernalar Kritis, Kreativitas, Kolaborasi, Kemandirian, Komunikasi',
+        'Penalaran Kritis, Kreativitas, Kolaborasi, Kemandirian, Komunikasi',
         'Problem-Based Learning (PBL) dan Roleplay Simulation terstruktur',
         'Mitra DUDI: Dunia Usaha & Industri Perdagangan Batang. Peran Ortu: Pendampingan rekaman video latihan mandiri.',
         'Ruang Fisik: Kelas kolaboratif melingkar. Ruang Virtual: Google Classroom & audio script podcast digital.',
@@ -495,7 +546,7 @@ export function downloadRppExcelTemplate(type: 'kejuruan' | 'umum' | 'blank' = '
     sampleRows = [
       [
         1, '', '', '', '', '', 12, 'F', 'XI', '1 (Ganjil)',
-        '', '', '', 'Bernalar Kritis, Kreativitas, Kolaborasi, Kemandirian',
+        '', '', '', 'Penalaran Kritis, Kreativitas, Kolaborasi, Kemandirian',
         'Problem-Based Learning (PBL)', '', '', 'Google Classroom',
         '', '', '', '', '', '', '', '', '', '', '', '', '', '',
       ],
@@ -516,9 +567,9 @@ export function downloadRppExcelTemplate(type: 'kejuruan' | 'umum' | 'blank' = '
         'XI',
         '1 (Ganjil)',
         'Akuntansi Keuangan, Matematika Bisnis, dan Manajemen Perkantoran',
-        'Minat: Literasi finansial, spreadsheet akuntansi, wirausaha. 40% Visual, 40% Auditory, 20% Kinestetik. Lingkungan: UMKM & Lembaga Keuangan sekitar Bawang, Batang.',
+        'Minat: Literasi finansial, spreadsheet akuntansi, wirausaha. Gaya belajar: campuran visual, auditori, dan kinestetik. Lingkungan: UMKM & Lembaga Keuangan sekitar Bawang, Batang.',
         'Materi konseptual prinsip debet-kredit yang terintegrasi secara aplikatif dengan pencatatan pembukuan riil usaha dagang/jasa.',
-        'Bernalar Kritis, Kreativitas, Kolaborasi, Kemandirian, Integritas',
+        'Penalaran Kritis, Kreativitas, Kolaborasi, Kemandirian, Integritas',
         'Problem-Based Learning (PBL) berbasis dokumen transaksi otentik',
         'Mitra DUDI: Kantor Akuntan Publik & Bank Mini SMK Muhammadiyah Bawang. Peran Ortu: Pendampingan observasi pencatatan keuangan usaha di rumah.',
         'Ruang Fisik: Lab Akuntansi / Bengkel Kejuruan berstandar 5S. Ruang Virtual: Google Classroom & Spreadsheet Kolaboratif.',
@@ -550,9 +601,9 @@ export function downloadRppExcelTemplate(type: 'kejuruan' | 'umum' | 'blank' = '
         'XI',
         '1 (Ganjil)',
         'Komputer Akuntansi dan Teknologi Informasi Terapan (TIK)',
-        'Minat: Aplikasi software komputer, spreadsheet, teknologi digital. Cara belajar praktikum lab 50% kinestetik, 30% visual, 20% auditory.',
+        'Minat: Aplikasi software komputer, spreadsheet, teknologi digital. Gaya belajar: dominan kinestetik (praktikum), didukung visual dan auditori.',
         'Materi aplikatif praktikum komputer akuntansi yang menuntut ketelitian tinggi, pemahaman alur sistem, dan kepatuhan SOP digital.',
-        'Bernalar Kritis, Kemandirian, Kreativitas, Teliti',
+        'Penalaran Kritis, Kemandirian, Kreativitas, Teliti',
         'Project-Based Learning (PjBL) simulasi pendirian pembukuan digital perusahaan',
         'Mitra DUDI: CV/PT Mitra Rekanan dan Software House Akuntansi. Peran Ortu: Menjaga kedisiplinan belajar komputer.',
         'Ruang Fisik: Laboratorium Komputer SMK Muhammadiyah Bawang ber-AC dan berstandar K3LH. Ruang Virtual: Google Classroom.',
@@ -575,40 +626,7 @@ export function downloadRppExcelTemplate(type: 'kejuruan' | 'umum' | 'blank' = '
     ];
   }
 
-  const headers = [
-    'No / Unit',
-    'Elemen',
-    'Capaian Pembelajaran (CP)',
-    'Alur & Tujuan Pembelajaran (ATP / TP)',
-    'Tahapan Alur Pembelajaran',
-    'Lingkup Materi Pokok',
-    'Alokasi Waktu (JP)',
-    'Fase',
-    'Kelas',
-    'Semester',
-    'Lintas Disiplin Ilmu',
-    'Kesiapan Peserta Didik (Minat & Gaya Belajar)',
-    'Karakteristik & Sifat Materi',
-    'Dimensi Profil Lulusan / P5',
-    'Metode & Model Pembelajaran',
-    'Kemitraan Industri & Orang Tua',
-    'Lingkungan Belajar (Fisik & Virtual)',
-    'Pemanfaatan Digital',
-    'Kegiatan Awal - Sintaks Pendahuluan (Mindful Learning; satu langkah per baris atau 1. 2. 3.)',
-    'Sintaks Inti 1 - Memahami & Eksplorasi (Meaningful Learning)',
-    'Sintaks Inti 2 - Mengaplikasi & Merefleksi (Joyful Learning)',
-    'Sintaks Penutup (Refleksi 3-2-1 & Kaizen)',
-    'Asesmen Awal (Diagnostik)',
-    'Asesmen Proses (Formatif - Diskusi / Presentasi / Unjuk Kerja)',
-    'Asesmen Akhir (Sumatif - Job Sheet / Proyek / LKPD)',
-    'Pengayaan dan Remedial',
-    'Tabel Hasil Eksplorasi (Judul :: Kolom1 | Kolom2 :: Data)',
-    'Tautan Materi (Hyperlink)',
-    'Kode Embed Materi (HTML / Script)',
-    'Tautan LKPD (Hyperlink)',
-    'Kode Embed LKPD (HTML / Iframe)',
-    'Kode Embed Rubrik (HTML)',
-  ];
+  const headers = RPP_TEMPLATE_HEADERS;
 
   const templateData = [
     [templateTitle],
@@ -621,34 +639,7 @@ export function downloadRppExcelTemplate(type: 'kejuruan' | 'umum' | 'blank' = '
 
   const ws = XLSX.utils.aoa_to_sheet(templateData);
 
-  ws['!cols'] = [
-    { wch: 8 },  // No
-    { wch: 28 }, // Elemen
-    { wch: 45 }, // CP
-    { wch: 45 }, // TP
-    { wch: 35 }, // Alur
-    { wch: 35 }, // Materi
-    { wch: 16 }, // JP
-    { wch: 8 },  // Fase
-    { wch: 8 },  // Kelas
-    { wch: 12 }, // Semester
-    { wch: 28 }, // Lintas Disiplin
-    { wch: 35 }, // Kesiapan
-    { wch: 35 }, // Karakteristik
-    { wch: 30 }, // Profil Lulusan
-    { wch: 30 }, // Metode
-    { wch: 32 }, // Kemitraan
-    { wch: 30 }, // Lingkungan
-    { wch: 28 }, // Digital
-    { wch: 45 }, // Sintaks Awal (Mindful)
-    { wch: 45 }, // Sintaks Inti 1 (Meaningful)
-    { wch: 45 }, // Sintaks Inti 2 (Joyful)
-    { wch: 40 }, // Sintaks Penutup
-    { wch: 32 }, // Asesmen Awal
-    { wch: 35 }, // Asesmen Proses
-    { wch: 35 }, // Asesmen Akhir
-    { wch: 35 }, // Pengayaan & Remedial
-  ];
+  ws['!cols'] = RPP_TEMPLATE_WIDTHS.map((wch) => ({ wch }));
 
   XLSX.utils.book_append_sheet(wb, ws, 'Format_RPP_Terintegrasi');
   XLSX.writeFile(wb, filename);
@@ -677,7 +668,7 @@ export function exportAtpToExcel(atpList: AlurTujuanPembelajaranItem[], identity
     ['Mata Pelajaran', ':', identity.mataPelajaran],
     ['Fase / Kelas / Semester', ':', `Fase ${identity.fase} / Kelas ${identity.kelas} / Semester ${identity.semester}`],
     ['Tahun Pelajaran', ':', identity.tahunPelajaran],
-    ['Guru Pengampu', ':', `${identity.namaGuru} (NIP: ${identity.nipGuru})`],
+    ['Guru Pengampu', ':', `${identity.namaGuru}${identity.nipGuru && identity.nipGuru.trim() ? ` (${identity.jenisIdGuru ?? 'NIP'}: ${identity.nipGuru})` : ''}`],
     [],
     [
       'Kode TP',
@@ -724,39 +715,46 @@ export function exportAtpToExcel(atpList: AlurTujuanPembelajaranItem[], identity
   XLSX.writeFile(wb, `ATP_${safeSubject}_SMK_Muhammadiyah_Bawang_${identity.tahunPelajaran.replace('/', '-')}.xlsx`);
 }
 
+/** Tautan bawaan generator yang bukan tautan sungguhan; tidak ikut diekspor. */
+const isPlaceholderLink = (u: string | undefined): boolean =>
+  !u || u === 'https://guru.kemdikbud.go.id/' || u.includes('1sample-lkpd');
+
+/** Satukan teks Tahapan Alur milik semua butir ATP pada satu unit (id: atp-{i}-{k}, atp-rpp-{n}, atp-rpp-{n}-{k}). */
+function alurUntukUnit(atpList: AlurTujuanPembelajaranItem[] | undefined, index: number): string {
+  if (!atpList) return '';
+  return atpList
+    .filter((a) => {
+      let m = /^atp-rpp-(\d+)(?:-\d+)?$/.exec(a.id);
+      if (m) return Number(m[1]) - 1 === index;
+      m = /^atp-(\d+)-\d+$/.exec(a.id);
+      return !!m && Number(m[1]) === index;
+    })
+    .map((a) => (a.alurTujuanPembelajaran || '').trim())
+    .filter(Boolean)
+    .join('\n');
+}
+
+/** Ubah tabel eksplorasi kembali ke format sel: Judul :: Kolom1 | Kolom2 :: Data1a | Data1b ; Data2a | Data2b */
+function tabelEksplorasiKeSel(t?: { judul: string; kolom: [string, string]; data: [string, string][] }): string {
+  if (!t) return '';
+  const bersih = (v: string) => String(v ?? '').replace(/::|[|;]/g, ' - ').replace(/\s+/g, ' ').trim();
+  const baris = (t.data || []).map((r) => `${bersih(r[0])} | ${bersih(r[1])}`).join(' ; ');
+  return `${bersih(t.judul)} :: ${bersih(t.kolom[0])} | ${bersih(t.kolom[1])} :: ${baris}`;
+}
+
 /**
- * Exports all active RPP units to the full integrated Excel format
+ * Exports all active RPP units to the full integrated Excel format.
+ * Kolom, nama header, dan urutannya SAMA dengan template RPP Terintegrasi, sehingga hasil ekspor
+ * bisa diunggah kembali tanpa kehilangan kolom (termasuk Tahapan Alur, Tabel Eksplorasi, tautan, dan embed).
  */
-export function exportRppToExcel(modulList: ModulAjarData[], identity: SchoolIdentity) {
+export function exportRppToExcel(
+  modulList: ModulAjarData[],
+  identity: SchoolIdentity,
+  atpList?: AlurTujuanPembelajaranItem[]
+) {
   const wb = XLSX.utils.book_new();
 
-  const headers = [
-    'No / Unit',
-    'Elemen',
-    'Capaian Pembelajaran (CP)',
-    'Alur & Tujuan Pembelajaran (ATP / TP)',
-    'Lingkup Materi Pokok',
-    'Alokasi Waktu (JP)',
-    'Fase',
-    'Kelas',
-    'Semester',
-    'Lintas Disiplin Ilmu',
-    'Kesiapan Peserta Didik (Minat & Gaya Belajar)',
-    'Karakteristik & Sifat Materi',
-    'Dimensi Profil Lulusan / P5',
-    'Metode & Model Pembelajaran',
-    'Kemitraan Industri & Orang Tua',
-    'Lingkungan Belajar (Fisik & Virtual)',
-    'Pemanfaatan Digital',
-    'Kegiatan Awal - Sintaks Pendahuluan (Mindful Learning; satu langkah per baris atau 1. 2. 3.)',
-    'Sintaks Inti 1 - Memahami & Eksplorasi (Meaningful Learning)',
-    'Sintaks Inti 2 - Mengaplikasi & Merefleksi (Joyful Learning)',
-    'Sintaks Penutup (Refleksi 3-2-1 & Kaizen)',
-    'Asesmen Awal (Diagnostik)',
-    'Asesmen Proses (Formatif)',
-    'Asesmen Akhir (Sumatif)',
-    'Pengayaan dan Remedial',
-  ];
+  const headers = RPP_TEMPLATE_HEADERS;
 
   const dataRows = modulList.map((m, idx) => {
     const rpp = m.rppFormat;
@@ -764,58 +762,72 @@ export function exportRppToExcel(modulList: ModulAjarData[], identity: SchoolIde
     const desain = rpp.perencanaanMendalam.desainPembelajaran;
     const peng = rpp.pengalamanBelajar;
     const ases = rpp.asesmen;
+    const lampiran = rpp.lampiran;
+    const kerangka = desain.kerangkaPembelajaran;
 
     const profilList: string[] = [];
-    if (ident.dimensiProfilLulusan.bernalarKritis) profilList.push('Bernalar Kritis');
+    if (ident.dimensiProfilLulusan.keimananKetakwaan) profilList.push('Keimanan dan Ketakwaan');
+    if (ident.dimensiProfilLulusan.kewargaan) profilList.push('Kewargaan');
+    if (ident.dimensiProfilLulusan.bernalarKritis) profilList.push('Penalaran Kritis');
     if (ident.dimensiProfilLulusan.kreativitas) profilList.push('Kreativitas');
     if (ident.dimensiProfilLulusan.kolaborasi) profilList.push('Kolaborasi');
     if (ident.dimensiProfilLulusan.kemandirian) profilList.push('Kemandirian');
-    if (ident.dimensiProfilLulusan.keimananKetakwaan) profilList.push('Keimanan & Ketakwaan');
-    if (ident.dimensiProfilLulusan.komunikasi) profilList.push('Komunikasi');
-    if (ident.dimensiProfilLulusan.kewargaan) profilList.push('Kewargaan');
     if (ident.dimensiProfilLulusan.kesehatan) profilList.push('Kesehatan');
+    if (ident.dimensiProfilLulusan.komunikasi) profilList.push('Komunikasi');
+
+    const peranOrtu = kerangka.kemitraanPembelajaran.orangTuaWali.peran.join(' ');
+    const kemitraan = `Mitra DUDI: ${kerangka.kemitraanPembelajaran.mitraIndustri.nama}${peranOrtu ? ` Peran Ortu: ${peranOrtu}` : ''}`;
 
     return [
       idx + 1,
       m.elemenTerkait,
       desain.capaianPembelajaran,
-      desain.tujuanPembelajaran.join('\n'),
+      desain.tujuanPembelajaran.map((t, i) => `${i + 1}. ${t}`).join('\n'),
+      alurUntukUnit(atpList, idx),
       m.judulMateri,
-      m.alokasiWaktuMateri.replace(/\D/g, '') || 12,
+      parseInt(m.alokasiWaktuMateri.replace(/\D/g, ''), 10) || 12,
       identity.fase,
       identity.kelas,
       identity.semester,
       desain.lintasDisiplinIlmu,
-      `Minat: ${ident.kesiapanPesertaDidik.minat}. Gaya Belajar: ${ident.kesiapanPesertaDidik.caraBelajar}. Lingkungan: ${ident.kesiapanPesertaDidik.lingkunganTempatTinggal}`,
-      `${ident.karakteristikMateri.deskripsiMateri} | Sifat: ${ident.karakteristikMateri.sifatMateri.konseptualDanAplikatif}`,
+      `Minat: ${ident.kesiapanPesertaDidik.minat} Gaya belajar: ${ident.kesiapanPesertaDidik.caraBelajar} Lingkungan: ${ident.kesiapanPesertaDidik.lingkunganTempatTinggal}`,
+      ident.karakteristikMateri.deskripsiMateri,
       profilList.join(', '),
-      `${desain.kerangkaPembelajaran.praktikPedagogik.pbl} | ${desain.kerangkaPembelajaran.praktikPedagogik.pjbl}`,
-      `Mitra: ${desain.kerangkaPembelajaran.kemitraanPembelajaran.mitraIndustri.nama} | Ortu: ${desain.kerangkaPembelajaran.kemitraanPembelajaran.orangTuaWali.peran.join(', ')}`,
-      `Fisik: ${desain.kerangkaPembelajaran.lingkunganBelajar.ruangFisik.join(', ')} | Virtual: ${desain.kerangkaPembelajaran.lingkunganBelajar.ruangVirtual.join(', ')}`,
-      desain.kerangkaPembelajaran.pemanfaatanDigital.join(', '),
+      kerangka.praktikPedagogik.pbl,
+      kemitraan,
+      `Ruang Fisik: ${kerangka.lingkunganBelajar.ruangFisik.join('; ')}. Ruang Virtual: ${kerangka.lingkunganBelajar.ruangVirtual.join('; ')}.`,
+      kerangka.pemanfaatanDigital.join(', '),
       langkahToExcelCell(getLangkahKegiatanAwal(peng, m.judulMateri)),
       peng.kegiatanInti.memahamiBermaknaMenggembirakan.instruksiGuru,
       peng.kegiatanInti.merefleksiBerkesadaranBermakna.instruksiAplikasi,
-      `Refleksi 3-2-1: ${peng.kegiatanPenutup.refleksiIndividu321.tigaHalPenting} | ${peng.kegiatanPenutup.kesimpulanDanPenguatan}`,
+      peng.kegiatanPenutup.kesimpulanDanPenguatan,
       ases.ringkasan.asesmenAwal,
-      `${ases.ringkasan.asesmenProses} (Diskusi: ${ases.asesmenProsesDetail.diskusi})`,
+      ases.ringkasan.asesmenProses,
       ases.ringkasan.asesmenAkhir,
-      `${rpp.pengayaanDanRemedial.pengayaan} | ${rpp.pengayaanDanRemedial.remedial}`,
+      `Pengayaan: ${rpp.pengayaanDanRemedial.pengayaan} Remedial: ${rpp.pengayaanDanRemedial.remedial}`,
+      tabelEksplorasiKeSel(peng.kegiatanInti.memahamiBermaknaMenggembirakan.tabelEksplorasi),
+      isPlaceholderLink(lampiran?.bahanBacaan?.tautan) ? '' : lampiran.bahanBacaan.tautan,
+      lampiran?.bahanBacaan?.embedCode || '',
+      isPlaceholderLink(lampiran?.lkpd?.tautan) ? '' : lampiran.lkpd.tautan,
+      lampiran?.lkpd?.embedCode || '',
+      lampiran?.embedCodeRubrik || '',
     ];
   });
 
   const fullSheet = [
-    ['REKAPITULASI RENCANA PELAKSANAAN PEMBELAJARAN (RPP) DEEP LEARNING - SMK MUHAMMADIYAH BAWANG'],
+    [`REKAPITULASI RPP DEEP LEARNING TERINTEGRASI - ${identity.schoolName.toUpperCase()}`],
     [`Mata Pelajaran: ${identity.mataPelajaran} | Kelas/Fase: ${identity.kelas}/Fase ${identity.fase} | Semester: ${identity.semester}`],
+    ['Format kolom sama dengan Template RPP Terintegrasi, sehingga file ini dapat diunggah kembali.'],
     [],
     headers,
     ...dataRows,
   ];
 
   const ws = XLSX.utils.aoa_to_sheet(fullSheet);
+  ws['!cols'] = RPP_TEMPLATE_WIDTHS.map((wch) => ({ wch }));
   XLSX.utils.book_append_sheet(wb, ws, 'RPP_DeepLearning');
   const safeSubject = identity.mataPelajaran.replace(/[^a-zA-Z0-9]/g, '_');
-  XLSX.writeFile(wb, `RPP_DeepLearning_${safeSubject}_SMK_Muhammadiyah_Bawang.xlsx`);
+  XLSX.writeFile(wb, `RPP_DeepLearning_${safeSubject}_${identity.schoolName.replace(/[^a-zA-Z0-9]/g, '_')}.xlsx`);
 }
 
 /**

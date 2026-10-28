@@ -44,6 +44,39 @@ const Field: React.FC<FieldProps> = ({ label, value, onChange, required, small, 
   </div>
 );
 
+interface IdFieldProps {
+  label: string;
+  jenis: 'NBM' | 'NIP' | undefined;
+  nomor: string | undefined;
+  onJenis: (j: 'NBM' | 'NIP') => void;
+  onNomor: (v: string) => void;
+}
+
+/** Pilihan jenis nomor induk (NBM atau NIP) beserta nomornya. Nomor yang dikosongkan tidak dicetak. */
+const IdField: React.FC<IdFieldProps> = ({ label, jenis, nomor, onJenis, onNomor }) => (
+  <div>
+    <label className="text-xs font-bold text-neutral-800 block mb-1">{label}</label>
+    <div className="flex gap-2">
+      <select
+        aria-label={`Jenis nomor induk: ${label}`}
+        value={jenis ?? 'NIP'}
+        onChange={(e) => onJenis(e.target.value as 'NBM' | 'NIP')}
+        className="px-2 py-2 border-2 border-black rounded-lg text-sm bg-white font-bold shrink-0"
+      >
+        <option value="NBM">NBM</option>
+        <option value="NIP">NIP</option>
+      </select>
+      <input
+        type="text"
+        aria-label={`Nomor induk: ${label}`}
+        value={nomor ?? ''}
+        onChange={(e) => onNomor(e.target.value)}
+        className={`${inputCls} min-w-0`}
+      />
+    </div>
+  </div>
+);
+
 export const SchoolIdentityModal: React.FC<SchoolIdentityModalProps> = ({
   isOpen,
   onClose,
@@ -177,7 +210,7 @@ export const SchoolIdentityModal: React.FC<SchoolIdentityModalProps> = ({
               Identitas Satuan Pendidikan & Guru
             </h3>
             <p className="text-xs text-neutral-600">
-              Semua isian bisa diubah. Perubahan langsung dipakai di dokumen ATP, RPP, dan lampiran.
+              Semua isian bisa diubah. Bidang yang dikosongkan tidak ditampilkan di dokumen ATP, RPP, dan lampiran.
             </p>
           </div>
         </div>
@@ -372,16 +405,24 @@ export const SchoolIdentityModal: React.FC<SchoolIdentityModalProps> = ({
                 onChange={(v) => set('namaGuru', v)}
                 required
               />
-              <Field label="NIP / NBM Guru" value={formData.nipGuru} onChange={(v) => set('nipGuru', v)} />
+              <IdField
+                label="NBM / NIP Guru"
+                jenis={formData.jenisIdGuru}
+                nomor={formData.nipGuru}
+                onJenis={(j) => set('jenisIdGuru', j)}
+                onNomor={(v) => set('nipGuru', v)}
+              />
               <Field
                 label="Nama Kepala Sekolah"
                 value={formData.namaKepalaSekolah}
                 onChange={(v) => set('namaKepalaSekolah', v)}
               />
-              <Field
-                label="NIP / NBM Kepala Sekolah"
-                value={formData.nipKepalaSekolah}
-                onChange={(v) => set('nipKepalaSekolah', v)}
+              <IdField
+                label="NBM / NIP Kepala Sekolah"
+                jenis={formData.jenisIdKepalaSekolah}
+                nomor={formData.nipKepalaSekolah}
+                onJenis={(j) => set('jenisIdKepalaSekolah', j)}
+                onNomor={(v) => set('nipKepalaSekolah', v)}
               />
             </div>
 
@@ -401,7 +442,7 @@ export const SchoolIdentityModal: React.FC<SchoolIdentityModalProps> = ({
               </div>
               <Field
                 label="Tempat Penetapan (tanda tangan)"
-                value={formData.tempatPenyusunan ?? 'Bawang'}
+                value={formData.tempatPenyusunan ?? ''}
                 onChange={(v) => set('tempatPenyusunan', v)}
                 placeholder="Misal: Bawang"
               />

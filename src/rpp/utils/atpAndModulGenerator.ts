@@ -111,6 +111,33 @@ export function generatePerangkatAjar(
     const materiParts = materi.split(/[,;\n]/).map((s) => s.trim()).filter(Boolean);
     const subTopics = materiParts.length > 0 ? materiParts : [materi];
 
+    const tpDariExcel = pecahButirBernomor(row.tujuanPembelajaran);
+    if (tpDariExcel.length > 0) {
+      // Kolom ATP / TP diisi: tiap nomor TP menjadi satu baris ATP, dipasangkan dengan Tahap yang bernomor sama
+      const butir = tpDariExcel.length > 6 ? [...tpDariExcel.slice(0, 5), tpDariExcel.slice(5).join(' ')] : tpDariExcel;
+      const tahap = pecahTahapan(row.alurPembelajaran);
+      const jpButir = bagiJp(jp, butir.length);
+      const alurPenuh = (row.alurPembelajaran || '').trim() || `Tahap 1: Orientasi ${materi}, Tahap 2: Eksplorasi dan praktik, Tahap 3: Refleksi dan asesmen.`;
+      butir.forEach((tp, k) => {
+        atpList.push({
+          id: `atp-${index}-${k + 1}`,
+          kodeTp: `TP ${index + 1}.${k + 1}`,
+          elemen,
+          capaianPembelajaran: cp,
+          lingkupMateri: subTopics[k] || materi,
+          kompetensi: kompetensiTp(k, butir.length),
+          tujuanPembelajaran: tp,
+          alurTujuanPembelajaran: alurUntukTp(tahap, butir.length, k, alurPenuh),
+          profilPelajarPancasila: ['Penalaran Kritis', 'Kreativitas', 'Kolaborasi'],
+          alokasiWaktuJp: jpButir[k],
+          asesmenRencana: {
+            diagnostik: 'Kuis kesiapan awal & tanya jawab lisan pemahaman prasyarat',
+            formatif: 'Lembar observasi proses & umpan balik teman sejawat',
+            sumatif: 'Penilaian produk atau unjuk kerja dengan KKTP 3 level (Berkembang, Cakap, Mahir)',
+          },
+        });
+      });
+    } else {
     // TP 1: Konseptual & Analitis
     const tp1Code = `${index + 1}.1`;
     const kompetensi1 = ['Memahami konsep', 'Menganalisis prinsip kerja', 'Mengidentifikasi karakteristik'];
@@ -126,7 +153,7 @@ export function generatePerangkatAjar(
       kompetensi: kompetensi1,
       tujuanPembelajaran: tp1,
       alurTujuanPembelajaran: atp1,
-      profilPelajarPancasila: ['Bernalar Kritis', 'Kemandirian'],
+      profilPelajarPancasila: ['Penalaran Kritis', 'Kemandirian'],
       alokasiWaktuJp: Math.max(2, Math.floor(jp * 0.4)),
       asesmenRencana: {
         diagnostik: 'Kuis kesiapan awal & tes tanya jawab lisan pemahaman prasyarat',
@@ -151,7 +178,7 @@ export function generatePerangkatAjar(
       kompetensi: kompetensi2,
       tujuanPembelajaran: tp2,
       alurTujuanPembelajaran: atp2,
-      profilPelajarPancasila: ['Kreativitas', 'Kolaborasi', 'Bernalar Kritis'],
+      profilPelajarPancasila: ['Kreativitas', 'Kolaborasi', 'Penalaran Kritis'],
       alokasiWaktuJp: Math.max(2, Math.ceil(jp * 0.6)),
       asesmenRencana: {
         diagnostik: 'Observasi kesiapan keterampilan dasar & alat kerja',
@@ -159,6 +186,8 @@ export function generatePerangkatAjar(
         sumatif: 'Penilaian proyek berbasis job sheet praktik / LKPD',
       },
     });
+
+    }
 
     // Generate RPP Pendekatan Deep Learning for this specific material
     const rppData = generateRppForMaterial(row, index + 1, identity, jp);
@@ -183,6 +212,136 @@ function checkProfil(text: string | undefined, ...keywords: string[]): boolean {
   if (!text) return false;
   const lower = text.toLowerCase();
   return keywords.some((k) => lower.includes(k));
+}
+
+// ---------------------------------------------------------------------------
+// Pembaca kolom Excel (selaras dengan prompt AI RPP)
+// ---------------------------------------------------------------------------
+
+type KunciProfil = 'iman' | 'warga' | 'kritis' | 'kreatif' | 'kolab' | 'mandiri' | 'sehat' | 'komunikasi';
+
+/** Delapan Dimensi Profil Lulusan beserta kata kunci yang dikenali di sel Excel. */
+const PROFIL_DIMENSI: { kunci: KunciProfil; label: string; kata: string[] }[] = [
+  { kunci: 'iman', label: 'Keimanan dan Ketakwaan', kata: ['iman', 'takwa', 'akhlak', 'spiritual'] },
+  { kunci: 'warga', label: 'Kewargaan', kata: ['warga'] },
+  { kunci: 'kritis', label: 'Penalaran Kritis', kata: ['kritis', 'nalar', 'penalaran'] },
+  { kunci: 'kreatif', label: 'Kreativitas', kata: ['kreatif', 'kreativ'] },
+  { kunci: 'kolab', label: 'Kolaborasi', kata: ['kolaborasi', 'gotong'] },
+  { kunci: 'mandiri', label: 'Kemandirian', kata: ['mandiri'] },
+  { kunci: 'sehat', label: 'Kesehatan', kata: ['sehat', 'jasmani'] },
+  { kunci: 'komunikasi', label: 'Komunikasi', kata: ['komunikasi'] },
+];
+
+/** Baca dimensi yang disebut di sel. Bila ada yang dikenali, hanya itu yang dipakai (tidak dipaksa aktif). */
+export function bacaProfil(text?: string): { flags: Record<KunciProfil, boolean>; ada: boolean } {
+  const flags = {} as Record<KunciProfil, boolean>;
+  PROFIL_DIMENSI.forEach((d) => {
+    flags[d.kunci] = checkProfil(text, ...d.kata);
+  });
+  return { flags, ada: PROFIL_DIMENSI.some((d) => flags[d.kunci]) };
+}
+
+/** Pecah "1. A\n2. B" atau "1. A 2. B" (atau butir bertitik koma) menjadi daftar tanpa nomor. */
+export function pecahButirBernomor(text?: string): string[] {
+  const t = (text || '').trim();
+  if (!t) return [];
+  let parts = t.split(/\r?\n+/).map((x) => x.trim()).filter(Boolean);
+  if (parts.length === 1 && /^\s*1\s*[.)]\s+\S/.test(parts[0])) {
+    const inline = parts[0].split(/\s+(?=\d{1,2}\s*[.)]\s+\S)/);
+    if (inline.length > 1) parts = inline;
+  }
+  if (parts.length === 1 && parts[0].includes(';')) {
+    parts = parts[0].split(';').map((x) => x.trim()).filter(Boolean);
+  }
+  return parts
+    .map((x) => x.replace(/^\s*(?:\d{1,2}\s*[.)]|[a-zA-Z][.)]|[-•*])\s*/, '').trim())
+    .filter(Boolean);
+}
+
+/** Pecah Tahapan Alur: "Tahap 1 (30 menit): ... Tahap 2 ..." menjadi satu entri per tahap. */
+export function pecahTahapan(alur?: string): string[] {
+  const t = (alur || '').trim();
+  if (!t) return [];
+  const perTahap = t
+    .split(/\s*(?=\bTahap\s*\d+\b)/i)
+    .map((x) => x.trim().replace(/[,;]\s*$/, ''))
+    .filter(Boolean);
+  if (perTahap.length > 1) return perTahap;
+  return t.split(/\r?\n+/).map((x) => x.trim()).filter(Boolean);
+}
+
+/** Tahapan alur yang dipasangkan dengan TP ke-k dari n TP (sisa tahap digabung ke TP terakhir). */
+function alurUntukTp(tahap: string[], n: number, k: number, penuh: string): string {
+  if (n <= 1 || tahap.length === 0) return penuh;
+  if (tahap.length >= n) return k < n - 1 ? tahap[k] : tahap.slice(n - 1).join(' ');
+  return tahap[k] ?? penuh;
+}
+
+/** Bagi alokasi JP unit ke n butir ATP (minimal 1 JP per butir). */
+function bagiJp(total: number, n: number): number[] {
+  const dasar = Math.floor(total / n);
+  const sisa = total - dasar * n;
+  return Array.from({ length: n }, (_, i) => Math.max(1, dasar + (i < sisa ? 1 : 0)));
+}
+
+function kompetensiTp(k: number, n: number): string[] {
+  if (n <= 1) return ['Memahami & Menganalisis', 'Mengaplikasikan', 'Mengevaluasi'];
+  if (k === 0) return ['Memahami & Menganalisis'];
+  if (k === n - 1 && n > 2) return ['Mengevaluasi & Merefleksi'];
+  return ['Mengaplikasikan'];
+}
+
+/** Pisahkan sel Kesiapan: "Minat: ... Gaya belajar: ... Lingkungan: ..." (label opsional). */
+export function pisahKesiapan(text?: string): { minat: string; gaya: string; lingkungan: string } {
+  const t = (text || '').trim();
+  const hasil = { minat: '', gaya: '', lingkungan: '' };
+  if (!t) return hasil;
+  const hits = [...t.matchAll(/(minat|gaya\s+belajar|cara\s+belajar|lingkungan(?:\s+tempat\s+tinggal)?)\s*[:：]/gi)];
+  if (hits.length === 0) {
+    hasil.minat = t;
+    return hasil;
+  }
+  const awal = t.slice(0, hits[0].index).trim();
+  hits.forEach((m, i) => {
+    const mulai = (m.index ?? 0) + m[0].length;
+    const akhir = i + 1 < hits.length ? hits[i + 1].index : undefined;
+    const isi = t.slice(mulai, akhir).trim().replace(/[\s.;,]+$/, '');
+    const label = m[1].toLowerCase();
+    const kunci = label.startsWith('minat') ? 'minat' : label.startsWith('lingkungan') ? 'lingkungan' : 'gaya';
+    hasil[kunci] = hasil[kunci] ? `${hasil[kunci]}; ${isi}` : isi;
+  });
+  if (awal) hasil.minat = hasil.minat ? `${awal} ${hasil.minat}` : awal;
+  return hasil;
+}
+
+/** Pisahkan sel Kemitraan: "Mitra DUDI: ... Peran Ortu: ..." */
+export function pisahKemitraan(text?: string): { mitra: string; ortu: string } {
+  const t = (text || '').trim();
+  const buangLabel = (x: string) => x.replace(/^\s*mitra(?:\s+dudi|\s+industri)?\s*[:：]\s*/i, '').replace(/[\s.;|,]+$/, '').trim();
+  if (!t) return { mitra: '', ortu: '' };
+  const m = /(?:peran\s+)?(?:orang\s*tua|ortu|wali)(?:\s*\/\s*wali)?\s*[:：]/i.exec(t);
+  if (!m) return { mitra: buangLabel(t), ortu: '' };
+  return { mitra: buangLabel(t.slice(0, m.index)), ortu: t.slice(m.index + m[0].length).trim() };
+}
+
+/** Pisahkan sel Lingkungan Belajar: "Ruang Fisik: ... Ruang Virtual: ..." menjadi dua daftar. */
+export function pisahLingkungan(text?: string): { fisik: string[]; virtual: string[] } {
+  const t = (text || '').trim();
+  const butir = (x: string) =>
+    x
+      .split(/\r?\n|;/)
+      .map((b) => b.replace(/^\s*(?:\d{1,2}\s*[.)]|[-•*])\s*/, '').replace(/[\s.]+$/, '').trim())
+      .filter(Boolean);
+  if (!t) return { fisik: [], virtual: [] };
+  const hits = [...t.matchAll(/(?:ruang\s+)?(fisik|virtual)\s*[:：]/gi)];
+  if (hits.length === 0) return { fisik: butir(t), virtual: [] };
+  const hasil = { fisik: [] as string[], virtual: [] as string[] };
+  hits.forEach((m, i) => {
+    const mulai = (m.index ?? 0) + m[0].length;
+    const akhir = i + 1 < hits.length ? hits[i + 1].index : undefined;
+    hasil[m[1].toLowerCase() === 'fisik' ? 'fisik' : 'virtual'].push(...butir(t.slice(mulai, akhir)));
+  });
+  return hasil;
 }
 
 /**
@@ -216,22 +375,12 @@ export function generatePerangkatAjarFromRpp(
     const jpNum = typeof row.jp === 'number' ? row.jp : parseInt(String(row.jp || '12'), 10) || 12;
 
     // Dimensi Profil Lulusan (8 dimensi): tampil di kolom ATP "Dimensi Profil Lulusan"
-    const profilList: string[] = [];
-    if (row.profilLulusan) {
-      if (checkProfil(row.profilLulusan, 'iman', 'takwa', 'akhlak')) profilList.push('Keimanan & Ketakwaan');
-      if (checkProfil(row.profilLulusan, 'warga', 'kewargaan')) profilList.push('Kewargaan');
-      if (checkProfil(row.profilLulusan, 'kritis', 'nalar')) profilList.push('Bernalar Kritis');
-      if (checkProfil(row.profilLulusan, 'kreatif')) profilList.push('Kreativitas');
-      if (checkProfil(row.profilLulusan, 'kolaborasi', 'gotong')) profilList.push('Kolaborasi');
-      if (checkProfil(row.profilLulusan, 'mandiri')) profilList.push('Kemandirian');
-      if (checkProfil(row.profilLulusan, 'sehat')) profilList.push('Kesehatan');
-      if (checkProfil(row.profilLulusan, 'komunikasi')) profilList.push('Komunikasi');
-    }
-    if (profilList.length === 0) {
-      profilList.push('Bernalar Kritis', 'Kreativitas', 'Kolaborasi');
-    }
+    const profil = bacaProfil(row.profilLulusan);
+    const profilList: string[] = profil.ada
+      ? PROFIL_DIMENSI.filter((d) => profil.flags[d.kunci]).map((d) => d.label)
+      : ['Penalaran Kritis', 'Kreativitas', 'Kolaborasi'];
 
-    // 1. Build ATP Item synchronized with this RPP row
+    // 1. ATP: tiap nomor TP menjadi satu baris ATP, dipasangkan dengan Tahap yang bernomor sama
     const tpFormatted = row.tujuanPembelajaran
       ? row.tujuanPembelajaran.trim()
       : `Peserta didik mampu menganalisis, mempraktikkan, dan memecahkan permasalahan pada materi ${materi} dengan bernalar kritis dan mandiri.`;
@@ -239,22 +388,33 @@ export function generatePerangkatAjarFromRpp(
     const alurFormatted = row.alurPembelajaran ||
       `Tahap 1: Orientasi konsep dasar ${materi}, Tahap 2: Diskusi studi kasus & pembuktian parameter, Tahap 3: Praktik unjuk kerja terapan, Tahap 4: Refleksi 3-2-1 dan asesmen sumatif.`;
 
-    atpList.push({
-      id: `atp-rpp-${unitNo}`,
-      kodeTp: `TP ${unitNo}.1`,
-      elemen,
-      capaianPembelajaran: cp,
-      lingkupMateri: materi,
-      kompetensi: ['Memahami & Menganalisis', 'Mengaplikasikan', 'Mengevaluasi'],
-      tujuanPembelajaran: tpFormatted,
-      alurTujuanPembelajaran: alurFormatted,
-      profilPelajarPancasila: profilList,
-      alokasiWaktuJp: jpNum,
-      asesmenRencana: {
-        diagnostik: row.asesmenAwal || 'Kuis tanya jawab kesiapan mental dan uji prasyarat',
-        formatif: row.asesmenProses || 'Observasi unjuk kerja proses & penilaian presentasi kelompok',
-        sumatif: row.asesmenAkhir || 'Penilaian tugas job sheet LKPD dan tes tertulis akhir unit',
-      },
+    const butirTp = pecahButirBernomor(row.tujuanPembelajaran);
+    const butirAtp = butirTp.length === 0
+      ? [tpFormatted]
+      : butirTp.length > 6
+        ? [...butirTp.slice(0, 5), butirTp.slice(5).join(' ')]
+        : butirTp;
+    const tahapAlur = pecahTahapan(row.alurPembelajaran);
+    const jpPerButir = bagiJp(jpNum, butirAtp.length);
+
+    butirAtp.forEach((tp, k) => {
+      atpList.push({
+        id: `atp-rpp-${unitNo}-${k + 1}`,
+        kodeTp: `TP ${unitNo}.${k + 1}`,
+        elemen,
+        capaianPembelajaran: cp,
+        lingkupMateri: materi,
+        kompetensi: kompetensiTp(k, butirAtp.length),
+        tujuanPembelajaran: tp,
+        alurTujuanPembelajaran: alurUntukTp(tahapAlur, butirAtp.length, k, alurFormatted),
+        profilPelajarPancasila: profilList,
+        alokasiWaktuJp: jpPerButir[k],
+        asesmenRencana: {
+          diagnostik: row.asesmenAwal || 'Kuis tanya jawab kesiapan mental dan uji prasyarat',
+          formatif: row.asesmenProses || 'Observasi unjuk kerja proses & penilaian presentasi kelompok',
+          sumatif: row.asesmenAkhir || 'Penilaian tugas job sheet LKPD dan tes tertulis akhir unit',
+        },
+      });
     });
 
     // 2. Build ModulAjarData (RPP Deep Learning) synchronized with all columns
@@ -278,6 +438,10 @@ export function generatePerangkatAjarFromRpp(
         nilaiAkhir,
       };
     });
+
+    const kes = pisahKesiapan(row.kesiapanPesertaDidik);
+    const kem = pisahKemitraan(row.kemitraan);
+    const lingk = pisahLingkungan(row.lingkunganBelajar);
 
     const parsedTpList = row.tujuanPembelajaran
       ? row.tujuanPembelajaran
@@ -307,9 +471,9 @@ export function generatePerangkatAjarFromRpp(
         perencanaanMendalam: {
           identifikasi: {
             kesiapanPesertaDidik: {
-              minat: row.kesiapanPesertaDidik || 'Literasi teknologi terapan, sistem perbengkelan/bisnis finansial, wirausaha, sosial media.',
-              caraBelajar: '40% Murid memiliki gaya belajar visual, 40% auditory, dan 20% kinestetik / praktik langsung.',
-              lingkunganTempatTinggal: 'Keluarga pengrajin, pedagang, bengkel, perkebunan dan buruh di sekitar Bawang, Batang.',
+              minat: kes.minat || 'Literasi teknologi terapan, sistem perbengkelan/bisnis finansial, wirausaha, sosial media.',
+              caraBelajar: kes.gaya || 'Beragam (visual, auditori, kinestetik); pembelajaran disesuaikan melalui diferensiasi.',
+              lingkunganTempatTinggal: kes.lingkungan || `Beragam; murid tinggal di sekitar ${identity.kabupaten}.`,
             },
             karakteristikMateri: {
               deskripsiMateri: row.karakteristikMateri || `Materi yang dipelajari berupa pemahaman mendalam, analisis data, dan aplikasi kontekstual mengenai ${materi}.`,
@@ -323,14 +487,14 @@ export function generatePerangkatAjarFromRpp(
               },
             },
             dimensiProfilLulusan: {
-              keimananKetakwaan: checkProfil(row.profilLulusan, 'iman', 'takwa', 'akhlak'),
-              kesehatan: checkProfil(row.profilLulusan, 'sehat', 'jasmani'),
-              kemandirian: checkProfil(row.profilLulusan, 'mandiri') || true,
-              bernalarKritis: checkProfil(row.profilLulusan, 'kritis', 'nalar') || true,
-              kolaborasi: checkProfil(row.profilLulusan, 'kolaborasi', 'gotong') || true,
-              komunikasi: checkProfil(row.profilLulusan, 'komunikasi') || true,
-              kreativitas: checkProfil(row.profilLulusan, 'kreatif') || true,
-              kewargaan: checkProfil(row.profilLulusan, 'kewargaan', 'warga negara'),
+              keimananKetakwaan: profil.ada ? profil.flags.iman : false,
+              kesehatan: profil.ada ? profil.flags.sehat : false,
+              kemandirian: profil.ada ? profil.flags.mandiri : true,
+              bernalarKritis: profil.ada ? profil.flags.kritis : true,
+              kolaborasi: profil.ada ? profil.flags.kolab : true,
+              komunikasi: profil.ada ? profil.flags.komunikasi : true,
+              kreativitas: profil.ada ? profil.flags.kreatif : true,
+              kewargaan: profil.ada ? profil.flags.warga : false,
             },
           },
           desainPembelajaran: {
@@ -345,7 +509,7 @@ export function generatePerangkatAjarFromRpp(
               },
               kemitraanPembelajaran: {
                 mitraIndustri: {
-                  nama: row.kemitraan || 'Dunia Usaha & Dunia Industri (DUDI) Rekanan Batang',
+                  nama: kem.mitra || `Dunia Usaha & Dunia Industri (DUDI) Rekanan ${identity.kabupaten}`,
                   peran: [
                     'Memberikan data atau informasi tentang nama alat/dokumen beserta fungsinya.',
                     'Menyediakan narasumber/instruktur untuk menjelaskan standar operasional kerja.',
@@ -353,18 +517,18 @@ export function generatePerangkatAjarFromRpp(
                   terkaitPbl: 'Mendukung Murid dalam studi kasus peralatan, prosedur kerja, dan standar operasional.',
                 },
                 orangTuaWali: {
-                  peran: [
-                    'Mendukung kegiatan luar kelas (pengambilan data, observasi lingkungan, wawancara, dan dokumentasi).',
-                  ],
+                  peran: kem.ortu
+                    ? [kem.ortu]
+                    : ['Mendukung kegiatan luar kelas (pengambilan data, observasi lingkungan, wawancara, dan dokumentasi).'],
                   terkaitMetode: 'Menjadi penguat dan pendamping pembelajaran dari rumah.',
                 },
               },
               lingkunganBelajar: {
-                ruangFisik: [
+                ruangFisik: lingk.fisik.length > 0 ? lingk.fisik : [
                   'Kelas yang Fleksibel dan Kolaboratif',
                   `Bengkel / Laboratorium praktik ${identity.schoolName} standar 5S/5R`,
                 ],
-                ruangVirtual: [
+                ruangVirtual: lingk.virtual.length > 0 ? lingk.virtual : [
                   'Google Classroom (mengatur proyek, tugas, materi digital, dan forum diskusi)',
                   'Platform Kolaborasi Digital (Google Docs / Slides / Spreadsheet)',
                 ],
@@ -494,7 +658,7 @@ export function generatePerangkatAjarFromRpp(
             },
             rubrikPenilaianSikapObservasi: [
               {
-                kriteria: 'Bernalar Kritis',
+                kriteria: 'Penalaran Kritis',
                 sangatBaik: 'Aktif menganalisis dan mengajukan solusi inovatif secara mandiri',
                 baik: 'Mampu menganalisis masalah dan menyampaikan argumen runtut',
                 cukup: 'Mampu menganalisis jika dibantu pemantik pertanyaan',
@@ -642,7 +806,7 @@ function generateRppForMaterial(
 
   // Topic-specific customizers
   const subjectLower = identity.mataPelajaran.toLowerCase();
-  let defaultMitra = 'Bengkel Otomotif dan Industri Rekanan Batang';
+  let defaultMitra = `Bengkel Otomotif dan Industri Rekanan ${identity.kabupaten}`;
   let defaultInterest = 'Otomotif, teknologi permesinan, media sosial, game';
   let defaultDisiplin = `${identity.mataPelajaran} dan Kompetensi Keahlian Otomotif`;
   let tableCol1 = 'Waktu (s)';
@@ -678,7 +842,7 @@ function generateRppForMaterial(
       ['Agustus', '23.400.000'],
     ];
   } else if (subjectLower.includes('inggris') || subjectLower.includes('english')) {
-    defaultMitra = 'Dunia Usaha dan Industri Mitra Perdagangan Global Batang';
+    defaultMitra = `Dunia Usaha dan Industri Mitra Perdagangan Global ${identity.kabupaten}`;
     defaultInterest = 'Musik barat, media sosial, video editing, game online';
     defaultDisiplin = 'Bahasa Inggris, Komunikasi Bisnis, dan Kejuruan Terkait';
     tableCol1 = 'Situasi Komunikasi';
@@ -763,8 +927,8 @@ function generateRppForMaterial(
         identifikasi: {
           kesiapanPesertaDidik: {
             minat: defaultInterest,
-            caraBelajar: '40% Murid memiliki gaya belajar visual, 40% auditory, dan 20% kinestetik.',
-            lingkunganTempatTinggal: 'Pertanian, industri tekstil/manufaktur, perbengkelan, dan buruh di sekitar Bawang, Batang.',
+            caraBelajar: 'Beragam (visual, auditori, kinestetik); pembelajaran disesuaikan melalui diferensiasi.',
+            lingkunganTempatTinggal: `Beragam; murid tinggal di sekitar ${identity.kabupaten}.`,
           },
           karakteristikMateri: {
             deskripsiMateri: `Materi yang dipelajari berupa pemahaman mendalam, analisis data, dan aplikasi kontekstual mengenai ${materi}.`,
@@ -1034,7 +1198,7 @@ function generateRppForMaterial(
           ],
           soalAnalisisKontekstual: [
             `Analisis Hubungan Kasus Nyata: Jika suatu sistem ${materi} mengalami peningkatan beban operasional sebesar 30%, bagaimana dampak langsung terhadap keandalan keluaran? Jelaskan solusinya!`,
-            'Berikan satu contoh situasi nyata di dunia industri Kabupaten Batang yang secara langsung mengadopsi prinsip ini!',
+            `Berikan satu contoh situasi nyata di dunia industri ${identity.kabupaten} yang secara langsung mengadopsi prinsip ini!`,
             'Buatlah diagram alir alur proses kerja sistematis untuk mengatasi gangguan pada sistem tersebut!',
             'Berdasarkan data tabel hasil pengamatan di atas, rumuskan kesimpulan matematis atau teknis yang dapat dipertanggungjawabkan!',
           ],

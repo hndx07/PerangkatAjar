@@ -41,6 +41,9 @@ export const DEFAULT_SCHOOL_IDENTITY: SchoolIdentity = {
   namaKepalaSekolah: 'Imam Pamungkas, S.Pd., M.Si.',
   nipKepalaSekolah: '19750821 200501 1 008',
   tanggalPenyusunan: '15 Juli 2026',
+  tempatPenyusunan: 'Bawang',
+  jenisIdGuru: 'NIP',
+  jenisIdKepalaSekolah: 'NIP',
 };
 
 export const MAJOR_SAMPLES: MajorSample[] = [

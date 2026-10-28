@@ -39,6 +39,29 @@ export const PrintableDocument: React.FC<PrintableDocumentProps> = ({
   const schoolLogoUrl = customLogo || DEFAULT_SCHOOL_LOGO_URL;
   const watermarkUrl = customLogo || DEFAULT_WATERMARK_URL;
 
+  // Bidang identitas yang tidak diisi (kosong atau "-") tidak ditampilkan di dokumen
+  const terisi = (v?: string | null): boolean => !!v && v.trim() !== '' && v.trim() !== '-';
+  const gabung = (bagian: (string | false | undefined | null)[], pemisah = ', '): string =>
+    bagian
+      .filter((b): b is string => typeof b === 'string' && terisi(b))
+      .map((b) => b.trim())
+      .join(pemisah);
+  const satuanPendidikan = gabung([identity.schoolName, identity.kabupaten]);
+  const faseKelas = gabung(
+    [terisi(identity.fase) && `Fase ${identity.fase}`, terisi(identity.kelas) && `Kelas ${identity.kelas}`],
+    ' / '
+  );
+  const labelIdGuru = identity.jenisIdGuru ?? 'NBM/NIP';
+  const labelIdKepsek = identity.jenisIdKepalaSekolah ?? 'NBM/NIP';
+  const idRow = (label: string, value: string) =>
+    terisi(value) ? (
+      <div className="grid grid-cols-[150px_16px_1fr] items-start p-2">
+        <span className="font-bold text-neutral-800">{label}</span>
+        <span className="font-bold text-center text-neutral-900">:</span>
+        <span className="font-semibold text-neutral-900 pl-1">{value}</span>
+      </div>
+    ) : null;
+
   const effectiveMode = documentMode || (activeFilter === 'atp' ? 'atp_only' : activeFilter === 'modul' ? 'modul_selected' : activeFilter === 'all_modul' ? 'modul_all' : 'both_separate');
   const safeIndex = Math.min(
     selectedModulIndex !== undefined ? selectedModulIndex : (activeModulIndex || 0),
@@ -67,27 +90,58 @@ export const PrintableDocument: React.FC<PrintableDocumentProps> = ({
         </div>
 
         <div className="flex-1 text-center font-sans">
-          <h4 className="text-xs sm:text-sm font-black tracking-widest text-neutral-900 uppercase leading-tight">
-            {identity.majelisLine1 ?? 'MAJLIS PENDIDIKAN DASAR DAN MENENGAH'}
-          </h4>
-          <h5 className="text-xs sm:text-sm font-black tracking-wider text-neutral-900 uppercase leading-tight mt-0.5">
-            {identity.majelisLine2 ?? 'DAERAH MUHAMMADIYAH BATANG'}
-          </h5>
-          <h1 className="font-black text-xl sm:text-2xl md:text-3xl text-neutral-950 uppercase tracking-tight mt-0.5 leading-none">
-            {identity.schoolName ?? 'SMK MUHAMMADIYAH BAWANG'}
-          </h1>
-          <div className="text-xs sm:text-sm font-black tracking-[0.25em] text-neutral-900 uppercase my-1">
-            {identity.statusAkreditasi ?? 'T E R A K R E D I T A S I  “ A ”'}
-          </div>
-          <p className="text-[11px] sm:text-xs text-neutral-800 font-semibold leading-tight">
-            {identity.alamatLengkap ?? 'Jl. Bawang-Sukorejo Km 01 Ds. Jlamprang Kec. Bawang Kab. Batang.'}
-          </p>
-          <p className="text-[10px] sm:text-[11px] text-neutral-800 font-medium leading-tight mt-0.5">
-            Email : <span className="underline">{identity.email ?? 'smkmuhbawang@gmail.com'}</span>  Website : <span className="underline">{identity.website ?? 'www.smkmuhiba.sch.id'}</span>
-          </p>
-          <p className="text-[10px] sm:text-[11px] text-neutral-800 font-medium leading-tight">
-            Kode Pos. {identity.kodePos ?? '51274'} Telp. {identity.telepon ?? '(0285) 4486909'} Fax. {identity.fax ?? '(0285) 4486899'}
-          </p>
+          {terisi(identity.majelisLine1) && (
+            <h4 className="text-xs sm:text-sm font-black tracking-widest text-neutral-900 uppercase leading-tight">
+              {identity.majelisLine1}
+            </h4>
+          )}
+          {terisi(identity.majelisLine2) && (
+            <h5 className="text-xs sm:text-sm font-black tracking-wider text-neutral-900 uppercase leading-tight mt-0.5">
+              {identity.majelisLine2}
+            </h5>
+          )}
+          {terisi(identity.schoolName) && (
+            <h1 className="font-black text-xl sm:text-2xl md:text-3xl text-neutral-950 uppercase tracking-tight mt-0.5 leading-none">
+              {identity.schoolName}
+            </h1>
+          )}
+          {terisi(identity.statusAkreditasi) && (
+            <div className="text-xs sm:text-sm font-black tracking-[0.25em] text-neutral-900 uppercase my-1">
+              {identity.statusAkreditasi}
+            </div>
+          )}
+          {terisi(identity.alamatLengkap) && (
+            <p className="text-[11px] sm:text-xs text-neutral-800 font-semibold leading-tight">
+              {identity.alamatLengkap}
+            </p>
+          )}
+          {(terisi(identity.email) || terisi(identity.website)) && (
+            <p className="text-[10px] sm:text-[11px] text-neutral-800 font-medium leading-tight mt-0.5">
+              {terisi(identity.email) && (
+                <>
+                  Email : <span className="underline">{identity.email}</span>
+                </>
+              )}
+              {terisi(identity.email) && terisi(identity.website) && ' '}
+              {terisi(identity.website) && (
+                <>
+                  Website : <span className="underline">{identity.website}</span>
+                </>
+              )}
+            </p>
+          )}
+          {(terisi(identity.kodePos) || terisi(identity.telepon) || terisi(identity.fax)) && (
+            <p className="text-[10px] sm:text-[11px] text-neutral-800 font-medium leading-tight">
+              {gabung(
+                [
+                  terisi(identity.kodePos) && `Kode Pos. ${identity.kodePos}`,
+                  terisi(identity.telepon) && `Telp. ${identity.telepon}`,
+                  terisi(identity.fax) && `Fax. ${identity.fax}`,
+                ],
+                ' '
+              )}
+            </p>
+          )}
         </div>
 
         {/* Spacer to balance left logo and keep center school letterhead typography perfectly centered (right header icon removed) */}
@@ -106,24 +160,45 @@ export const PrintableDocument: React.FC<PrintableDocumentProps> = ({
         LEMBAR PENGESAHAN {contextTitle.toUpperCase()}
       </div>
       <p className="text-[11px] text-neutral-700 leading-relaxed text-center max-w-2xl mx-auto mb-5">
-        Disahkan dan dinyatakan berlaku sebagai panduan resmi pelaksanaan pembelajaran di <strong>{identity.schoolName}</strong> untuk Tahun Pelajaran {identity.tahunPelajaran}.
+        Disahkan dan dinyatakan berlaku sebagai panduan resmi pelaksanaan pembelajaran
+        {terisi(identity.schoolName) && (
+          <>
+            {' '}
+            di <strong>{identity.schoolName}</strong>
+          </>
+        )}
+        {terisi(identity.tahunPelajaran) && <> untuk Tahun Pelajaran {identity.tahunPelajaran}</>}.
       </p>
 
       <div className="grid grid-cols-2 gap-8 text-xs text-neutral-900 pt-2 max-w-4xl mx-auto">
         <div className="text-center">
           <p className="font-medium text-neutral-600">Mengetahui,</p>
-          <p className="font-extrabold text-neutral-900 mt-0.5">Kepala {identity.schoolName}</p>
+          <p className="font-extrabold text-neutral-900 mt-0.5">
+            Kepala{terisi(identity.schoolName) ? ` ${identity.schoolName}` : ''}
+          </p>
           <div className="h-24"></div>
-          <p className="font-black underline text-sm">{identity.namaKepalaSekolah}</p>
-          <p className="text-[11px] font-mono text-neutral-600">NBM/NIP. {identity.nipKepalaSekolah}</p>
+          {terisi(identity.namaKepalaSekolah) && (
+            <p className="font-black underline text-sm">{identity.namaKepalaSekolah}</p>
+          )}
+          {terisi(identity.nipKepalaSekolah) && (
+            <p className="text-[11px] font-mono text-neutral-600">
+              {labelIdKepsek}. {identity.nipKepalaSekolah}
+            </p>
+          )}
         </div>
 
         <div className="text-center">
-          <p className="font-medium text-neutral-600">{identity.tempatPenyusunan ?? 'Bawang'}, {identity.tanggalPenyusunan}</p>
+          <p className="font-medium text-neutral-600">
+            {gabung([identity.tempatPenyusunan, identity.tanggalPenyusunan]) || '\u00A0'}
+          </p>
           <p className="font-extrabold text-neutral-900 mt-0.5">Guru Pengampu</p>
           <div className="h-24"></div>
-          <p className="font-black underline text-sm">{identity.namaGuru}</p>
-          <p className="text-[11px] font-mono text-neutral-600">NBM/NIP. {identity.nipGuru}</p>
+          {terisi(identity.namaGuru) && <p className="font-black underline text-sm">{identity.namaGuru}</p>}
+          {terisi(identity.nipGuru) && (
+            <p className="text-[11px] font-mono text-neutral-600">
+              {labelIdGuru}. {identity.nipGuru}
+            </p>
+          )}
         </div>
       </div>
     </div>
@@ -184,7 +259,7 @@ export const PrintableDocument: React.FC<PrintableDocumentProps> = ({
             LAMPIRAN RPP PENDEKATAN DEEP LEARNING
           </h4>
           <p className="text-xs text-neutral-600">
-            Unit {index + 1}: {modul.judulMateri} · {identity.schoolName}, {identity.kabupaten}
+            Unit {index + 1}: {modul.judulMateri}{satuanPendidikan ? ` · ${satuanPendidikan}` : ''}
           </p>
 
           {/* Screen quick edit trigger for Lampiran */}
@@ -432,7 +507,7 @@ export const PrintableDocument: React.FC<PrintableDocumentProps> = ({
         {/* Title Header RPP */}
         <div className="text-center pb-1">
           <span className="text-[10px] font-black uppercase tracking-widest text-neutral-500 block mb-0.5">
-            PERANGKAT AJAR KURIKULUM MERDEKA · {identity.schoolName.toUpperCase()}
+            PERANGKAT AJAR KURIKULUM MERDEKA{terisi(identity.schoolName) ? ` · ${identity.schoolName.toUpperCase()}` : ''}
           </span>
           <h2 className="font-display font-black text-base sm:text-lg text-neutral-950 uppercase tracking-tight">
             RENCANA PELAKSANAAN PEMBELAJARAN (RPP)
@@ -455,26 +530,10 @@ export const PrintableDocument: React.FC<PrintableDocumentProps> = ({
             <div className="grid grid-cols-1 md:grid-cols-2 divide-y md:divide-y-0 md:divide-x divide-black text-xs">
               {/* Kolom Kiri */}
               <div className="divide-y divide-neutral-200">
-                <div className="grid grid-cols-[150px_16px_1fr] items-start p-2">
-                  <span className="font-bold text-neutral-800">Satuan Pendidikan</span>
-                  <span className="font-bold text-center text-neutral-900">:</span>
-                  <span className="font-semibold text-neutral-900 pl-1">{identity.schoolName}, {identity.kabupaten}</span>
-                </div>
-                <div className="grid grid-cols-[150px_16px_1fr] items-start p-2">
-                  <span className="font-bold text-neutral-800">Program Keahlian</span>
-                  <span className="font-bold text-center text-neutral-900">:</span>
-                  <span className="font-semibold text-neutral-900 pl-1">{identity.programKeahlian}</span>
-                </div>
-                <div className="grid grid-cols-[150px_16px_1fr] items-start p-2">
-                  <span className="font-bold text-neutral-800">Konsentrasi Keahlian</span>
-                  <span className="font-bold text-center text-neutral-900">:</span>
-                  <span className="font-semibold text-neutral-900 pl-1">{identity.konsentrasiKeahlian}</span>
-                </div>
-                <div className="grid grid-cols-[150px_16px_1fr] items-start p-2">
-                  <span className="font-bold text-neutral-800">Mata Pelajaran</span>
-                  <span className="font-bold text-center text-neutral-900">:</span>
-                  <span className="font-semibold text-neutral-900 pl-1">{identity.mataPelajaran}</span>
-                </div>
+                {idRow('Satuan Pendidikan', satuanPendidikan)}
+                {idRow('Program Keahlian', identity.programKeahlian)}
+                {idRow('Konsentrasi Keahlian', identity.konsentrasiKeahlian)}
+                {idRow('Mata Pelajaran', identity.mataPelajaran)}
                 <div className="grid grid-cols-[150px_16px_1fr] items-start p-2">
                   <span className="font-bold text-neutral-800">Lingkup Materi</span>
                   <span className="font-bold text-center text-neutral-900">:</span>
@@ -484,31 +543,15 @@ export const PrintableDocument: React.FC<PrintableDocumentProps> = ({
 
               {/* Kolom Kanan */}
               <div className="divide-y divide-neutral-200">
-                <div className="grid grid-cols-[150px_16px_1fr] items-start p-2">
-                  <span className="font-bold text-neutral-800">Fase / Kelas</span>
-                  <span className="font-bold text-center text-neutral-900">:</span>
-                  <span className="font-semibold text-neutral-900 pl-1">Fase {identity.fase} / Kelas {identity.kelas}</span>
-                </div>
-                <div className="grid grid-cols-[150px_16px_1fr] items-start p-2">
-                  <span className="font-bold text-neutral-800">Semester</span>
-                  <span className="font-bold text-center text-neutral-900">:</span>
-                  <span className="font-semibold text-neutral-900 pl-1">{identity.semester}</span>
-                </div>
-                <div className="grid grid-cols-[150px_16px_1fr] items-start p-2">
-                  <span className="font-bold text-neutral-800">Tahun Pelajaran</span>
-                  <span className="font-bold text-center text-neutral-900">:</span>
-                  <span className="font-semibold text-neutral-900 pl-1">{identity.tahunPelajaran}</span>
-                </div>
+                {idRow('Fase / Kelas', faseKelas)}
+                {idRow('Semester', identity.semester)}
+                {idRow('Tahun Pelajaran', identity.tahunPelajaran)}
                 <div className="grid grid-cols-[150px_16px_1fr] items-start p-2">
                   <span className="font-bold text-neutral-800">Alokasi Waktu (JP)</span>
                   <span className="font-bold text-center text-neutral-900">:</span>
                   <span className="font-mono font-bold text-neutral-900 pl-1">{modul.alokasiWaktuMateri || rpp.identitasTabel.waktuJp || '18 JP'}</span>
                 </div>
-                <div className="grid grid-cols-[150px_16px_1fr] items-start p-2">
-                  <span className="font-bold text-neutral-800">Guru Pengampu</span>
-                  <span className="font-bold text-center text-neutral-900">:</span>
-                  <span className="font-semibold text-neutral-900 pl-1">{identity.namaGuru}</span>
-                </div>
+                {idRow('Guru Pengampu', identity.namaGuru)}
               </div>
             </div>
           </div>
@@ -1310,61 +1353,36 @@ export const PrintableDocument: React.FC<PrintableDocumentProps> = ({
               <h2 className="font-display font-black text-lg sm:text-xl text-neutral-900 uppercase">
                 ALUR TUJUAN PEMBELAJARAN (ATP)
               </h2>
-              <p className="text-xs font-bold text-neutral-700 mt-0.5">
-                MATA PELAJARAN: {identity.mataPelajaran.toUpperCase()} · FASE {identity.fase} / KELAS {identity.kelas}
-              </p>
-              <p className="text-[11px] font-semibold text-neutral-600">
-                Tahun Pelajaran {identity.tahunPelajaran} · {identity.schoolName}, {identity.kabupaten}
-              </p>
+              {(terisi(identity.mataPelajaran) || faseKelas) && (
+                <p className="text-xs font-bold text-neutral-700 mt-0.5">
+                  {gabung(
+                    [terisi(identity.mataPelajaran) && `MATA PELAJARAN: ${identity.mataPelajaran.toUpperCase()}`, faseKelas.toUpperCase()],
+                    ' · '
+                  )}
+                </p>
+              )}
+              {(terisi(identity.tahunPelajaran) || satuanPendidikan) && (
+                <p className="text-[11px] font-semibold text-neutral-600">
+                  {gabung([terisi(identity.tahunPelajaran) && `Tahun Pelajaran ${identity.tahunPelajaran}`, satuanPendidikan], ' · ')}
+                </p>
+              )}
             </div>
 
             {/* Identitas ATP Tabel - 2-Kolom Landscape dengan Titik Dua yang Selaras */}
             <div className="border border-black overflow-hidden rpp-box bg-white text-xs">
               <div className="grid grid-cols-1 md:grid-cols-2 divide-y md:divide-y-0 md:divide-x divide-black">
                 <div className="divide-y divide-neutral-200">
-                  <div className="grid grid-cols-[150px_16px_1fr] items-start p-2">
-                    <span className="font-bold text-neutral-800">Satuan Pendidikan</span>
-                    <span className="font-bold text-center text-neutral-900">:</span>
-                    <span className="font-semibold text-neutral-900 pl-1">{identity.schoolName}, {identity.kabupaten}</span>
-                  </div>
-                  <div className="grid grid-cols-[150px_16px_1fr] items-start p-2">
-                    <span className="font-bold text-neutral-800">Program Keahlian</span>
-                    <span className="font-bold text-center text-neutral-900">:</span>
-                    <span className="font-semibold text-neutral-900 pl-1">{identity.programKeahlian}</span>
-                  </div>
-                  <div className="grid grid-cols-[150px_16px_1fr] items-start p-2">
-                    <span className="font-bold text-neutral-800">Konsentrasi Keahlian</span>
-                    <span className="font-bold text-center text-neutral-900">:</span>
-                    <span className="font-semibold text-neutral-900 pl-1">{identity.konsentrasiKeahlian}</span>
-                  </div>
-                  <div className="grid grid-cols-[150px_16px_1fr] items-start p-2">
-                    <span className="font-bold text-neutral-800">Mata Pelajaran</span>
-                    <span className="font-bold text-center text-neutral-900">:</span>
-                    <span className="font-semibold text-neutral-900 pl-1">{identity.mataPelajaran}</span>
-                  </div>
+                  {idRow('Satuan Pendidikan', satuanPendidikan)}
+                  {idRow('Program Keahlian', identity.programKeahlian)}
+                  {idRow('Konsentrasi Keahlian', identity.konsentrasiKeahlian)}
+                  {idRow('Mata Pelajaran', identity.mataPelajaran)}
                 </div>
 
                 <div className="divide-y divide-neutral-200">
-                  <div className="grid grid-cols-[150px_16px_1fr] items-start p-2">
-                    <span className="font-bold text-neutral-800">Fase / Kelas</span>
-                    <span className="font-bold text-center text-neutral-900">:</span>
-                    <span className="font-semibold text-neutral-900 pl-1">Fase {identity.fase} / Kelas {identity.kelas}</span>
-                  </div>
-                  <div className="grid grid-cols-[150px_16px_1fr] items-start p-2">
-                    <span className="font-bold text-neutral-800">Semester</span>
-                    <span className="font-bold text-center text-neutral-900">:</span>
-                    <span className="font-semibold text-neutral-900 pl-1">{identity.semester}</span>
-                  </div>
-                  <div className="grid grid-cols-[150px_16px_1fr] items-start p-2">
-                    <span className="font-bold text-neutral-800">Tahun Pelajaran</span>
-                    <span className="font-bold text-center text-neutral-900">:</span>
-                    <span className="font-semibold text-neutral-900 pl-1">{identity.tahunPelajaran}</span>
-                  </div>
-                  <div className="grid grid-cols-[150px_16px_1fr] items-start p-2">
-                    <span className="font-bold text-neutral-800">Guru Pengampu</span>
-                    <span className="font-bold text-center text-neutral-900">:</span>
-                    <span className="font-semibold text-neutral-900 pl-1">{identity.namaGuru}</span>
-                  </div>
+                  {idRow('Fase / Kelas', faseKelas)}
+                  {idRow('Semester', identity.semester)}
+                  {idRow('Tahun Pelajaran', identity.tahunPelajaran)}
+                  {idRow('Guru Pengampu', identity.namaGuru)}
                 </div>
               </div>
             </div>
@@ -1472,7 +1490,7 @@ export const PrintableDocument: React.FC<PrintableDocumentProps> = ({
             <div className="p-3 bg-emerald-50/70 border-2 border-black rounded-xl">
               <h5 className="font-extrabold text-xs uppercase tracking-wider text-emerald-950 mb-1.5 flex items-center gap-1.5">
                 <CheckCircle2 className="w-4 h-4 text-emerald-700" />
-                <span>Rangkaian Alur Linear Pembelajaran (Fase {identity.fase})</span>
+                <span>Rangkaian Alur Linear Pembelajaran{terisi(identity.fase) ? ` (Fase ${identity.fase})` : ''}</span>
               </h5>
               <div className="flex flex-wrap items-center gap-2 text-xs">
                 {atpList.map((item, i) => (
